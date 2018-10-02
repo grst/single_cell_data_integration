@@ -1,0 +1,3 @@
+[submodule "scanorama"]
+	path = scanorama
+	url = git@github.com:grst/scanorama.git

@@ -1,6 +1,6 @@
 LOCAL:
     temp-directory: /gpfs/scratch/pr62lo/
-    memory: 16g
+    memory: 48g
 META:
     species:
         - HUMAN
@@ -14,7 +14,7 @@ FILTER:
         start: 1
         end: 12
     UMI-barcode:
-        start: 3
+        start: 13
         end: 26
     cutadapt:
         adapters-file: adapters_10x_3p_v2.fa

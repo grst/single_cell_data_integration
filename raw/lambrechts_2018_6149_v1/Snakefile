@@ -1,0 +1,22 @@
+BASENAMES = [l.split(",")[0] for l in open("samples.csv").readlines()][1:]
+
+rule preprocess_v1:
+  """preprocess 10x chromium v1 chemistry files to
+  run them with the dropSeqPipe."""
+  input:
+     expand("data/{basename}_{read}.fastq.gz", read=["R1", "R2"], basename=BASENAMES)
+
+rule preprocess_sample:
+  input:
+    "data/unprocessed/{basename}.R1.fastq.gz",
+    "data/unprocessed/{basename}.R2.fastq.gz",
+    "data/unprocessed/{basename}.R3.fastq.gz"
+  output:
+    "data/{basename}_R1.fastq.gz",
+    "data/{basename}_R2.fastq.gz"
+  params:
+     basename="{basename}"
+  shell:
+    "../../scripts/preprocess_10x_3p_v1.py {params.basename} data/unprocessed data/"
+
+

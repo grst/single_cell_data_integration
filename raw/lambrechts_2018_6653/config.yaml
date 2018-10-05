@@ -1,20 +1,20 @@
 LOCAL:
-    temp-directory: /gpfs/scratch/pr62lo/
-    memory: 48g
+    temp-directory: /storage/scratch
+    memory: 4g
 META:
     species:
         - HUMAN
     ratio: 0
     reference-file: human_grch38.fasta
     annotation-file: Homo_sapiens.GRCh38.83.gtf
-    reference-directory: /storage/data/reference/homo_sapiens/GRch38/dropSeqPipe
+    reference-directory: /storage/data/reference/homo_sapiens/GRCh38/dropSeqPipe
 FILTER:
     5-prime-smart-adapter: CCTACACGACGCTCTTCCGATCT
     cell-barcode:
         start: 1
-        end: 12
+        end: 16
     UMI-barcode:
-        start: 13
+        start: 17
         end: 26
     cutadapt:
         adapters-file: adapters_10x_3p_v2.fa

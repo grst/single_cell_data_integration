@@ -4,3 +4,5 @@ raw/*/data
 logs
 reports
 summary
+.ipynb_checkpoints
+results

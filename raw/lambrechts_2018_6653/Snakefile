@@ -1,0 +1,29 @@
+with open('samples.csv') as f:
+  SAMPLES =  [l.split(',')[0] for l in f.readlines()][1:]
+
+rule run_cellranger:
+  """process all samples with cellranger"""
+  input:
+    expand("data/cellranger/{sample}/outs/web_summary.html", sample=SAMPLES)
+
+rule process_cellranger_sample:
+  """process the fastq files using cellranger"""
+  output:
+    "data/cellranger/{sample}/outs/web_summary.html"
+  threads: 6
+  resources:
+    mem_mb=24576
+  params:
+    sample='{sample}'
+  shell:
+    "cd data/cellranger && "
+    "rm -rf ./{params.sample} &&"
+    "/storage/apps/pipelines/cellranger_10x/cellranger-2.2.0/cellranger count "
+    " --expect-cells=4000"
+    " --chemistry='SC3Pv2'"
+    " --localcores=8"
+    " --localmem=32"
+    " --id={params.sample}"
+    " --fastqs=../fastq"
+    " --transcriptome=/storage/data/reference/homo_sapiens/GRCh38/cellranger/refdata-cellranger-GRCh38-1.2.0"
+    " --sample={params.sample}"

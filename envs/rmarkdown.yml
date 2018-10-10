@@ -384,4 +384,5 @@ dependencies:
   - wget=1.19.5=h1ad7b7a_0
   - r-conflicted=1.0.0=r341h6115d3f_0
   - testfixtures==6.3.0
+  - r-bookdown=0.7
 

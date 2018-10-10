@@ -30,9 +30,9 @@ with(azizi_peer, {
     as.data.frame() %>% 
     column_to_rownames("cell_name") %>%
     t() %>% 
-    as.data.frame() 
+    as_tibble(rownames="gene")
   system("mkdir -p ../results/data_processed/azizi_peer_2018")
-  write_tsv(mat,  "../results/data_processed/azizi_peer_2018/raw_counts.tsv")
+  write_tsv(mat,  "../results/data_processed/azizi_peer_2018/raw_counts.txt")
   write_tsv(meta, "../results/data_processed/azizi_peer_2018/pdata.tsv")
 })
 
@@ -42,7 +42,7 @@ rm(azizi_peer)
 ```{r}
 azizi_peer_10x = new.env()
 with(azizi_peer_10x, {
-   raw_counts = read_tsv("../data/azizi_peer_2018_10x/GSE114724_raw_counts.tsv") 
+   raw_counts = read_tsv("../data/azizi_peer_2018_10x/GSE114724_raw_counts.txt") 
    cell_barcode = raw_counts[1,-1] %>% as.character()
    sample_names = colnames(raw_counts)[-1]
    assert(length(cell_barcode) == length(sample_names))
@@ -50,7 +50,7 @@ with(azizi_peer_10x, {
    colnames(raw_counts) = c("gene", cell_names)
    system("mkdir -p ../results/data_processed/azizi_peer_2018_10x")
    raw_counts %>% filter(gene != "Sample_Barcodes") %>% 
-     write_tsv("../results/data_processed/azizi_peer_2018_10x/raw_counts.tsv")
+     write_tsv("../results/data_processed/azizi_peer_2018_10x/raw_counts.txt")
 
 })
 
@@ -66,7 +66,7 @@ with(guo_zhang_2018, {
   raw_counts = read_tsv("../data/guo_zhang_2018/GSE99254_NSCLC.TCell.S12346.count.txt.gz")
   system("mkdir -p ../results/data_processed/guo_zhang_2018")
   write_tsv(patient_data, "../results/data_processed/guo_zhang_2018/pdata.tsv")
-  raw_counts %>% select(-geneID) %>% drop_na() %>% write_tsv("../results/data_processed/guo_zhang_2018/raw_counts.tsv")
+  raw_counts %>% select(-geneID) %>% drop_na() %>% write_tsv("../results/data_processed/guo_zhang_2018/raw_counts.txt")
 })
 rm(guo_zhang_2018)
 ```
@@ -93,12 +93,13 @@ with(zheng_zhang, {
   raw_counts = read_tsv("../data/zheng_zhang_2017/GSE98638_HCC.TCell.S5063.count.txt.gz")
   system("mkdir -p ../results/data_processed/zheng_zhang_2017")
   write_tsv(patient_data, "../results/data_processed/zheng_zhang_2017/pdata.tsv")
-  raw_counts %>% select(-geneID) %>% drop_na() %>% write_tsv("../results/data_processed/zheng_zhang_2017/raw_counts.tsv")
+  raw_counts %>% select(-geneID) %>% drop_na() %>% write_tsv("../results/data_processed/zheng_zhang_2017/raw_counts.txt")
 })
 rm(zheng_zhang)
 ```
 
-```{r}
-dir("../results/data_processed/", no..=TRUE, full.names = TRUE) %>% sapply(normalizePath) %>% write_lines("../results/data_processed/datasets.txt")
+```{bash}
+find ../results/data_processed | grep mtx$ | xargs readlink -f | xargs dirname > ../results/data_processed/datasets.txt
+find ../results/data_processed | grep raw_counts | xargs readlink -f >> ../results/data_processed/datasets.txt
 ```
 

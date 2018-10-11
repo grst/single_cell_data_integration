@@ -54,19 +54,19 @@ rule preprocess_data_scanorama:
 rule scanorama:
    """run scanorama to integrate the single cell datasets. """
    input:
-      DATA_PATH + "scanorama_datasets.txt",
-      expand(DATA_PATH + "{data_file_npz}", data_file_npz=DATA_FILES_SCANORAMA)
+      expand(DATA_PATH + "{data_file_npz}", data_file_npz=DATA_FILES_SCANORAMA),
+      scanorama_datasets=DATA_PATH + "scanorama_datasets.txt"
    output:
       "results/scanorama/datasets_dimred.npz",
       "results/scanorama/datasets.npz",
-      "results/scanorama/genes.npz"
+      "results/scanorama/genes.npz",
+      "results/scanorama/tsne.npz"
    conda:
       "envs/scanorama.yml"
    shell:
       """
       conda develop scanorama
-      cut -f1 tables/datasets.tsv | tail -n+2 > /tmp/scanorama_samples.txt
-      python scanorama/bin/run_panorama.py /tmp/scanorama_samples.txt results/scanorama
+      python scanorama/bin/run_panorama.py {input.scanorama_datasets} results/scanorama
       """
 
 

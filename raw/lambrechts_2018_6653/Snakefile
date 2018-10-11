@@ -10,9 +10,9 @@ rule process_cellranger_sample:
   """process the fastq files using cellranger"""
   output:
     "data/cellranger/{sample}/outs/web_summary.html"
-  threads: 6
+  threads: 10
   resources:
-    mem_mb=24576
+    mem_mb=50000
   params:
     sample='{sample}'
   shell:
@@ -21,8 +21,8 @@ rule process_cellranger_sample:
     "/storage/apps/pipelines/cellranger_10x/cellranger-2.2.0/cellranger count "
     " --expect-cells=4000"
     " --chemistry='SC3Pv2'"
-    " --localcores=8"
-    " --localmem=32"
+    " --localcores=10"
+    " --localmem=48"
     " --id={params.sample}"
     " --fastqs=../fastq"
     " --transcriptome=/storage/data/reference/homo_sapiens/GRCh38/cellranger/refdata-cellranger-GRCh38-1.2.0"

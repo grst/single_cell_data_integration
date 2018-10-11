@@ -1,16 +1,42 @@
-BASENAMES = [l.split(",")[0] for l in open("samples.csv").readlines()][1:]
+import os.path as path
+
+with open('samples.csv') as f:
+	SAMPLES =  [l.split(',')[0] for l in f.readlines()][1:]
 
 rule preprocess_v1:
   """preprocess 10x chromium v1 chemistry files to
   run them with the dropSeqPipe."""
   input:
-     expand("data/{basename}_{read}.fastq.gz", read=["R1", "R2"], basename=BASENAMES)
+     expand("data/fastq/{basename}_{read}.fastq.gz", read=["R1", "R2"], basename=SAMPLES)
+
+rule rename_v1:
+  """rename 10x chromiumx v1 chemistry files
+  to run them with cellranger"""
+  input:
+      expand("data/fastq_renamed/{basename}_S0_L001_{read}_001.fastq.gz", read=["R1", "I1", "R2"], basename=SAMPLES)
+
+
+rule rename_sample:
+  input:
+    "data/fastq/{basename}.R1.fastq.gz",
+    "data/fastq/{basename}.R2.fastq.gz",
+    "data/fastq/{basename}.R3.fastq.gz"
+  output:
+    "data/fastq_renamed/{basename}_S0_L001_R1_001.fastq.gz",
+    "data/fastq_renamed/{basename}_S0_L001_I1_001.fastq.gz",
+    "data/fastq_renamed/{basename}_S0_L001_R2_001.fastq.gz"
+  run:
+    for i, o in zip(input, output):
+      i_abs, o_abs = [path.abspath(p) for p in [i, o]]
+      shell("ln -s {} {}".format(i_abs, o_abs))
+
 
 rule preprocess_sample:
+  "preprocess for dropseqpipe"
   input:
-    "data/unprocessed/{basename}.R1.fastq.gz",
-    "data/unprocessed/{basename}.R2.fastq.gz",
-    "data/unprocessed/{basename}.R3.fastq.gz"
+    "data/fastq/{basename}.R1.fastq.gz",
+    "data/fastq/{basename}.R2.fastq.gz",
+    "data/fastq/{basename}.R3.fastq.gz"
   output:
     "data/{basename}_R1.fastq.gz",
     "data/{basename}_R2.fastq.gz"
@@ -18,5 +44,32 @@ rule preprocess_sample:
      basename="{basename}"
   shell:
     "../../scripts/preprocess_10x_3p_v1.py {params.basename} data/unprocessed data/"
+
+rule run_cellranger:
+	"""process all samples with cellranger"""
+	input:
+		expand("data/cellranger/{sample}/outs/web_summary.html", sample=SAMPLES)
+
+rule process_cellranger_sample:
+	"""process the fastq files using cellranger"""
+	output:
+		"data/cellranger/{sample}/outs/web_summary.html"
+	params:
+		sample='{sample}'
+  threads: 8
+  resources:
+    mem_mb=25000
+	shell:
+		"cd data/cellranger && "
+		"rm -rf ./{params.sample} &&"
+		"/storage/apps/pipelines/cellranger_10x/cellranger-2.2.0/cellranger count "
+		" --expect-cells=4000"
+		" --chemistry='SC3Pv1'"
+		" --localcores=8"
+		" --localmem=32"
+		" --id={params.sample}"
+		" --fastqs=../fastq"
+		" --transcriptome=/storage/data/reference/homo_sapiens/GRCh38/cellranger/refdata-cellranger-GRCh38-1.2.0"
+		" --sample={params.sample}"
 
 

@@ -6,3 +6,4 @@ reports
 summary
 .ipynb_checkpoints
 results
+*.ipynb

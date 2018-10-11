@@ -1,0 +1,128 @@
+---
+jupyter:
+  jupytext_format_version: '1.0'
+  kernelspec:
+    display_name: Python [conda env:single_cell_integration]
+    language: python
+    name: conda-env-single_cell_integration-py
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+---
+
+```{python}
+import numpy as np
+import scipy as sp
+import scanpy.api as sc
+import pandas as pd
+import anndata
+```
+
+```{python}
+tmp = np.genfromtxt("../tables/regev_lab_cell_cycle_genes.txt", dtype='str')
+cell_cycle_genes = {
+    "s": tmp[:43],
+    'g2m': tmp[43:]
+}
+```
+
+```{python}
+dataset_tab = pd.read_csv("../tables/datasets.tsv", sep="\t")
+dataset_map = dataset_tab.set_index('path').to_dict(orient='index')
+```
+
+```{python}
+# scanorama_tsne = np.load("../results/scanorama/")['arr_0']
+datasets_dimred = np.load("../results/scanorama/datasets_dimred.npz")['arr_0']
+datasets = np.load("../results/scanorama/datasets.npz")['arr_0']
+```
+
+```{python}
+genes = np.genfromtxt("../results/scanorama/genes.txt", dtype="str")
+labels = np.genfromtxt("../results/scanorama/labels.txt", dtype='int')
+label_names = np.genfromtxt("../results/scanorama/label_names.txt", dtype='str')
+label_names = np.array([l.replace('results/data_processed/', '') for l in label_names])
+labels_id = np.array([dataset_map[label_names[i]]['id'] for i in labels])
+```
+
+```{python}
+# concatenate the matrices into a large single matrix
+scanorama_dimred = np.concatenate(datasets_dimred)
+scanorama = sp.sparse.vstack(datasets)
+scanorama.shape
+```
+
+```{python}
+assert scanorama.shape[0] == scanorama_dimred.shape[0] == labels.shape[0] == labels_id.shape[0]
+assert scanorama.shape[1] == genes.shape[0]
+```
+
+## Prepare data for scanpy
+
+```{python}
+fdata = pd.DataFrame().assign(gene_symbol = genes).set_index('gene_symbol')
+```
+
+```{python}
+pdata = pd.DataFrame().assign(source = labels_id)
+```
+
+# Initial quality control
+*check if data clusters by cell type and not by other confounders*
+
+* color by
+    - cell cycle labels
+    - n_detected_genes
+    - sum of pathway genes
+    
+* "overdispersed genes"? 
+* tSNE vs. PCA
+* doublet detection? 
+
+### Notes
+- use griph to detect cell cycle genes
+
+
+```{python}
+adata = anndata.AnnData(scanorama, var=fdata, obs=pdata)
+adata.shape
+```
+
+```{python}
+sc.pp.filter_cells(adata, min_genes=200)
+```
+
+```{python}
+adata.shape
+```
+
+```{python}
+sc.pp.filter_genes(adata, min_cells=3)
+```
+
+```{python}
+adata.shape
+```
+
+```{python}
+sc.pp.log1p(adata)
+```
+
+```{python}
+sc.pp.scale(adata)
+```
+
+```{python}
+sc.tl.score_genes_cell_cycle(adata, s_genes=cell_cycle_genes['s'], g2m_genes=cell_cycle_genes['g2m'])
+```
+
+```{python}
+
+```

@@ -1,0 +1,46 @@
+import os.path as path
+
+with open('samples.csv') as f:
+  SAMPLES =  [l.split(',')[0] for l in f.readlines()][1:]
+
+rule run_cellranger:
+  """process all samples with cellranger"""
+  input:
+    expand("data/cellranger_4000/{sample}/outs/web_summary.html", sample=SAMPLES)
+
+rule rename:
+  """rename fastq files to match cellranger naming convention"""
+  input:
+    expand("data/fastq_renamed/{basename}_S0_L000_{read}_001.fastq.gz", read=["R1", "R2"], basename=SAMPLES)
+
+rule rename_sample:
+  input:
+    expand("data/fastq/{basename}_{read}.fastq.gz", read=["R1", "R2"], basename="{basename}")
+  output:
+    expand("data/fastq_renamed/{basename}_S0_L000_{read}_001.fastq.gz", read=["R1", "R2"], basename="{basename}")
+  run:
+    for i, o in zip(input, output):
+      i_abs, o_abs = [path.abspath(p) for p in [i, o]]
+      shell("ln -s {} {}".format(i_abs, o_abs))
+
+rule process_cellranger_sample:
+  """process the fastq files using cellranger"""
+  output:
+    "data/cellranger_4000/{sample}/outs/web_summary.html"
+  threads: 16
+  resources:
+    mem_mb=70000
+  params:
+    sample='{sample}'
+  shell:
+    "cd data/cellranger_4000 && "
+    "rm -rf ./{params.sample} &&"
+    "/storage/apps/pipelines/cellranger_10x/cellranger-2.2.0/cellranger count "
+    " --force-cells=3283"
+    " --chemistry='SC3Pv2'"
+    " --localcores={threads}"
+    " --localmem=64"
+    " --id={params.sample}"
+    " --fastqs=../fastq_renamed"
+    " --transcriptome=/storage/data/reference/homo_sapiens/GRCh38/cellranger/refdata-cellranger-GRCh38-1.2.0"
+    " --sample={params.sample}"

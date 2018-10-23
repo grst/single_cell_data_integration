@@ -23,6 +23,11 @@ import scipy as sp
 import scanpy.api as sc
 import pandas as pd
 import anndata
+from pylab import subplots
+```
+
+```{python}
+mcp_sig = pd.read_csv("../tables/mcp_counter_signatures.txt", sep="\t")
 ```
 
 ```{python}
@@ -71,7 +76,9 @@ fdata = pd.DataFrame().assign(gene_symbol = genes).set_index('gene_symbol')
 ```
 
 ```{python}
-pdata = pd.DataFrame().assign(source = labels_id)
+pdata = pd.DataFrame().assign(source = labels_id)\
+                      .assign(cell_id = ["cell_{}".format(i) for i in range(len(labels_id))])\
+                      .set_index("cell_id")
 ```
 
 # Initial quality control
@@ -96,7 +103,11 @@ adata.shape
 ```
 
 ```{python}
-sc.pp.filter_cells(adata, min_genes=200)
+sc.pl.highest_expr_genes(adata, n_top=20)
+```
+
+```{python}
+sc.pp.filter_cells(adata, min_genes=100)
 ```
 
 ```{python}
@@ -112,15 +123,99 @@ adata.shape
 ```
 
 ```{python}
-sc.pp.log1p(adata)
+mito_genes = [name for name in adata.var_names if name.startswith('MT-')]
+# for each cell compute fraction of counts in mito genes vs. all genes
+# the `.A1` is only necessary as X is sparse to transform to a dense array after summing
+adata.obs['percent_mito'] = np.sum(
+    adata[:, mito_genes].X, axis=1).A1 / np.sum(adata.X, axis=1).A1
+# add the total counts per cell as observations-annotation to adata
+adata.obs['n_counts'] = adata.X.sum(axis=1).A1
 ```
 
 ```{python}
-sc.pp.scale(adata)
+sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
+             jitter=0.4, multi_panel=True)
+```
+
+```{python}
+sc.pl.scatter(adata, x='n_counts', y='n_genes', color="source")
 ```
 
 ```{python}
 sc.tl.score_genes_cell_cycle(adata, s_genes=cell_cycle_genes['s'], g2m_genes=cell_cycle_genes['g2m'])
+```
+
+## Embeddings
+### PCA
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+```
+
+```{python}
+sc.pl.pca(adata, color='source')
+```
+
+```{python}
+sc.pl.pca_variance_ratio(adata, log=False)
+```
+
+### UMAP
+
+```{python}
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+```
+
+```{python}
+sc.tl.umap(adata)
+```
+
+```{python}
+fig, ax = subplots(figsize=(10, 6))
+sc.pl.umap(adata, color="source", ax=ax)
+```
+
+### t-SNE
+
+```{python}
+sc.tl.tsne(adata)
+```
+
+```{python}
+fig, ax = subplots(figsize=(10, 6))
+sc.pl.umap(adata, color="source", ax=ax)
+```
+
+## Clustering
+
+```{python}
+sc.tl.louvain(adata)
+```
+
+```{python}
+sc.pl.umap(adata, color=['louvain'])
+```
+
+## Cell type detection (using MCP counter)
+
+```{python}
+cell_types = mcp_sig["Cell population"].unique()
+```
+
+```{python}
+for ct in cell_types:
+    tmp_genes = mcp_sig["HUGO symbols"][mcp_sig["Cell population"] == ct].values
+    tmp_genes = np.array([g for g in tmp_genes if g in adata.var_names])
+    print(ct)
+    print(tmp_genes)
+    idx = np.where(adata.var_names.isin(tmp_genes))[0]
+    score_per_cell = np.sum(adata.X[:, idx], axis=1)
+    adata.obs[ct] = score_per_cell
+```
+
+```{python}
+for ct in cell_types:
+    sc.pl.umap(adata, color=ct)
 ```
 
 ```{python}

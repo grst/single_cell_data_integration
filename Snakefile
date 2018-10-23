@@ -1,13 +1,14 @@
 import pandas as pd
+
 DATA_PATH = "results/data_processed/"
 DATASETS = pd.read_csv("tables/datasets.tsv", sep="\t")
 DATA_FILES_PROCESSED = []
 DATA_FILES_SCANORAMA = []
-for i, path, type in DATASETS.itertuples():
-  if type == 'tsv':
+for i, path, type_, id_ in DATASETS.itertuples():
+  if type_ == 'tsv':
     DATA_FILES_PROCESSED.append(path + '.txt')
     DATA_FILES_SCANORAMA.append(path + '.npz')
-  elif type == "mtx":
+  elif type_ == "mtx":
     DATA_FILES_PROCESSED.extend([path + '/genes.tsv', path + '/barcodes.tsv', path + '/matrix.mtx'])
     DATA_FILES_SCANORAMA.extend([path + '/tab.genes.txt', path + '/tab.npz'])
 
@@ -18,7 +19,8 @@ rule preprocess_data:
    full matrix or 10x sparse matrix"""
    input:
       "results/book/01_preprocess_data.html",
-      "tables/datasets.tsv"
+      "tables/datasets.tsv",
+      DATA_FILES_PROCESSED
    output:
       expand(DATA_PATH + "{data_file}", data_file=DATA_FILES_PROCESSED)
 

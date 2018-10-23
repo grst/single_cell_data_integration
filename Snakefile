@@ -55,12 +55,15 @@ rule scanorama:
    """run scanorama to integrate the single cell datasets. """
    input:
       expand(DATA_PATH + "{data_file_npz}", data_file_npz=DATA_FILES_SCANORAMA),
+      "scanorama/bin/run_panorama.py",
       scanorama_datasets=DATA_PATH + "scanorama_datasets.txt"
    output:
       "results/scanorama/datasets_dimred.npz",
       "results/scanorama/datasets.npz",
-      "results/scanorama/genes.npz",
-      "results/scanorama/tsne.npz"
+      "results/scanorama/genes.txt",
+      "results/scanorama/tsne.npz",
+      "results/scanorama/labels.txt",
+      "results/scanorama/label_names.txt"
    conda:
       "envs/scanorama.yml"
    shell:

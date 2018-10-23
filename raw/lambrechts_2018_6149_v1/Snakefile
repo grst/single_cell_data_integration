@@ -13,18 +13,16 @@ rule rename_v1:
   """rename 10x chromiumx v1 chemistry files
   to run them with cellranger"""
   input:
-      expand("data/fastq_renamed/{basename}_S0_L001_{read}_001.fastq.gz", read=["R1", "I1", "R2"], basename=SAMPLES)
+      expand("data/fastq_renamed/{basename}_S0_L001_{read}_001.fastq.gz", read=["R1", "R2"], basename=SAMPLES)
 
 
 rule rename_sample:
   input:
-    "data/fastq/{basename}.R1.fastq.gz",
-    "data/fastq/{basename}.R2.fastq.gz",
-    "data/fastq/{basename}.R3.fastq.gz"
+    "data/fastq_processed/{basename}_R1.fastq.gz",
+    "data/fastq_processed/{basename}_R2.fastq.gz"
   output:
-    "data/fastq_renamed/{basename}_S0_L001_R2_001.fastq.gz",
-    "data/fastq_renamed/{basename}_S0_L001_I1_001.fastq.gz",
-    "data/fastq_renamed/{basename}_S0_L001_R1_001.fastq.gz"
+    "data/fastq_renamed/{basename}_S0_L001_R1_001.fastq.gz",
+    "data/fastq_renamed/{basename}_S0_L001_R2_001.fastq.gz"
   run:
     for i, o in zip(input, output):
       i_abs, o_abs = [path.abspath(p) for p in [i, o]]
@@ -53,7 +51,7 @@ rule run_cellranger:
 rule process_cellranger_sample:
   """process the fastq files using cellranger"""
   input:
-      expand("data/fastq_renamed/{sample}_S0_L001_{read}_001.fastq.gz", read=["R1", "I1", "R2"], sample="{sample}")
+      expand("data/fastq_renamed/{sample}_S0_L001_{read}_001.fastq.gz", read=["R1", "R2"], sample="{sample}")
   output:
     "data/cellranger/{sample}/outs/web_summary.html"
   params:

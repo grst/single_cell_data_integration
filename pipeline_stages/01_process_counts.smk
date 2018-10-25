@@ -27,6 +27,10 @@ rule _process_counts:
     """
     input:
         "scripts/01_process_counts/{dataset}.py"
+    conda:
+        "../envs/process_counts.yml"
     output:
         path.join(DATA_PATH, "{dataset}/adata.h5ad")
+    shell:
+        "python {input}"
 

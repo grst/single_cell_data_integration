@@ -17,7 +17,10 @@ import os.path as path
 
 # define the datasets
 DATA_PATH = "results/data_processed/"
-DATASETS = pd.read_csv("tables/datasets.tsv", sep="\t")
+DATASETS = pd.read_csv("tables/datasets.tsv", sep="\t")["id"].values
+
+
+include: "pipeline_stages/01_process_counts.smk"
 
 
 rule render_rmd:

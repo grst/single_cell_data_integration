@@ -23,14 +23,14 @@ from anndata import AnnData
 import os.path
 
 DATASET = "azizi_peer_2018"
-COUNT_FILE = "../../data/{}/GSE114725_raw_counts.csv".format(DATASET)
-OUTPUT_DIR = "../../results/data_processed/{}/".format(DATASET)
+COUNT_FILE = "data/{}/GSE114725_raw_counts.csv".format(DATASET)
+OUTPUT_DIR = "results/data_processed/{}/".format(DATASET)
 
 raw_counts = pd.read_csv(COUNT_FILE)
 
 obs = raw_counts[["patient", "tissue", "replicate", "cluster", "cellid"]]
-obs = meta.assign(cell_name = ["_".join((str(p), str(i))) for p, i in zip(meta.patient, meta.cellid)])
-obs = meta.set_index("cell_name")
+obs = obs.assign(cell_name = ["_".join((str(p), str(i))) for p, i in zip(obs.patient, obs.cellid)])
+obs = obs.set_index("cell_name")
 
 mat = raw_counts.iloc[:,5:]
 

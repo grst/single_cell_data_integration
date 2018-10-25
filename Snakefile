@@ -1,79 +1,23 @@
-import pandas as pd
+"""
+SINGLE CELL DATA INTEGRATION PIPELINE
 
+The purpose of the pipeline is to
+* read in single cell datasets ('process_counts') and bring them in to a consistent format
+* apply qc, filtering and preprocessing steps to the indvidual datasets ('data_cleaning')
+* integrate the datasets by removing batch effects
+
+The rules for the different pipeline stages can be found in the folder `pipeline_stages`.
+
+Each dataset has a unique identifier assigned which is used for folder and file names.
+The datasets and their identifiers are defined in `tables/datasets.tsv`
+"""
+
+import pandas as pd
+import os.path as path
+
+# define the datasets
 DATA_PATH = "results/data_processed/"
 DATASETS = pd.read_csv("tables/datasets.tsv", sep="\t")
-DATA_FILES_PROCESSED = []
-DATA_FILES_SCANORAMA = []
-for i, path, type_, id_ in DATASETS.itertuples():
-  if type_ == 'tsv':
-    DATA_FILES_PROCESSED.append(path + '.txt')
-    DATA_FILES_SCANORAMA.append(path + '.npz')
-  elif type_ == "mtx":
-    DATA_FILES_PROCESSED.extend([path + '/genes.tsv', path + '/barcodes.tsv', path + '/matrix.mtx'])
-    DATA_FILES_SCANORAMA.extend([path + '/tab.genes.txt', path + '/tab.npz'])
-
-
-rule preprocess_data:
-   """read in all datasets from `data` and bring
-   them in a consisten matrix format (either genes x cells
-   full matrix or 10x sparse matrix"""
-   input:
-      "results/book/01_preprocess_data.html",
-      "tables/datasets.tsv",
-      DATA_FILES_PROCESSED
-   output:
-      expand(DATA_PATH + "{data_file}", data_file=DATA_FILES_PROCESSED)
-
-
-rule scanorama_input_file:
-   """generate text file that list the dataset in a scanorama-compatible way. """
-   input:
-      "tables/datasets.tsv"
-   output:
-      DATA_PATH + "scanorama_datasets.txt"
-   run:
-      with open(output[0], 'wt') as f:
-        for p in DATASETS.path:
-          f.write(DATA_PATH + p + '\n')
-
-
-rule preprocess_data_scanorama:
-   """use the scanorama preprocessor to generate `npz` files
-   of the data"""
-   input:
-      expand(DATA_PATH + "{data_file}", data_file=DATA_FILES_PROCESSED),
-      scanorama_datasets=DATA_PATH + "scanorama_datasets.txt"
-   output:
-      expand(DATA_PATH + "{data_file_npz}", data_file_npz=DATA_FILES_SCANORAMA)
-   conda:
-      "envs/scanorama.yml"
-   shell:
-      """
-      conda develop scanorama
-      python scanorama/bin/process.py {input.scanorama_datasets}
-      """
-
-rule scanorama:
-   """run scanorama to integrate the single cell datasets. """
-   input:
-      expand(DATA_PATH + "{data_file_npz}", data_file_npz=DATA_FILES_SCANORAMA),
-      "scanorama/bin/run_panorama.py",
-      scanorama_datasets=DATA_PATH + "scanorama_datasets.txt"
-   output:
-      "results/scanorama/datasets_dimred.npz",
-      "results/scanorama/datasets.npz",
-      "results/scanorama/genes.txt",
-      "results/scanorama/tsne.npz",
-      "results/scanorama/labels.txt",
-      "results/scanorama/label_names.txt"
-   conda:
-      "envs/scanorama.yml"
-   shell:
-      """
-      conda develop scanorama
-      python scanorama/bin/run_panorama.py {input.scanorama_datasets} results/scanorama
-      """
-
 
 
 rule render_rmd:
@@ -82,14 +26,14 @@ rule render_rmd:
    input:
       "notebooks/{doc}.Rmd"
    output:
-      "results/book/{doc}.html"
+      "results/reports/{doc}.html"
    conda:
       "envs/rmarkdown.yml"
    shell:
       """
       cd notebooks && \\
-      Rscript -e "bookdown::render_book('{input}', \\
+      Rscript -e "reportsdown::render_reports('{input}', \\
         output_file='../{output}', \\
-        output_format=bookdown::html_document2(), \\
+        output_format=reportsdown::html_document2(), \\
         preview=TRUE)"
       """

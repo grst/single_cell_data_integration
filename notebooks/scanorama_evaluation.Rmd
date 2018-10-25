@@ -24,6 +24,7 @@ import scanpy.api as sc
 import pandas as pd
 import anndata
 from pylab import subplots
+import MulticoreTSNE
 ```
 
 ```{python}
@@ -178,7 +179,7 @@ sc.pl.umap(adata, color="source", ax=ax)
 ### t-SNE
 
 ```{python}
-sc.tl.tsne(adata)
+sc.tl.tsne(adata, n_jobs=32)
 ```
 
 ```{python}

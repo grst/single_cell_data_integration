@@ -1,6 +1,6 @@
 import pandas as pd
 import scanpy.api as sc
-from anndata import AnnData 
+from anndata import AnnData
 import os.path
 
 DATASET = "zheng_bileas_2017"

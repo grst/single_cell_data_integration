@@ -32,5 +32,5 @@ rule _process_counts:
     output:
         path.join(DATA_PATH, "{dataset}/adata.h5ad")
     shell:
-        "python {input}"
+        "PYTHONPATH=lib python {input}"
 

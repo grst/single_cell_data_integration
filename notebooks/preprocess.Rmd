@@ -1,0 +1,236 @@
+---
+jupyter:
+  jupytext_format_version: '1.0'
+  kernelspec:
+    display_name: Python [conda env:single_cell_integration]
+    language: python
+    name: conda-env-single_cell_integration-py
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+---
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+
+import scanpy.api as sc
+import pandas as pd
+import numpy as np
+import scrublet as scr
+from plotnine import * 
+from pylab import subplots
+import sys
+sys.path.append("../lib")
+from jupytertools import *
+```
+
+```{python}
+mito_genes = pd.read_csv("../tables/mitochondrial_genes.tsv", sep="\t")["Gene stable ID"].values
+biomart = pd.read_csv("../tables/biomart.tsv", sep="\t")
+```
+
+```{python}
+adata = sc.read_h5ad("../results/data_processed/azizi_peer_2018/adata.h5ad")
+```
+
+```{python}
+MAX_GENES = 4000
+MIN_GENES = 200
+MAX_MITO = 0.15
+```
+
+```{python}
+adata
+```
+
+```{python}
+tmp_mito = [g for g in mito_genes if g in adata.var_names]
+adata.obs['percent_mito'] = np.sum(
+    adata[:, tmp_mito].X, axis=1) / np.sum(adata.X, axis=1)
+# add the total counts per cell as observations-annotation to adata
+adata.obs['n_counts'] = adata.X.sum(axis=1)
+adata.obs['n_dropouts'] = (adata.X == 0).sum(axis=1)
+adata.obs['n_genes'] = (adata.X != 0).sum(axis=1)
+adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False)
+adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True)
+```
+
+## Library size and number of detected genes.
+
+```{python}
+sc.pl.violin(adata, ['n_genes', 'n_dropouts', 'n_counts', 'percent_mito'],
+             jitter=0.4, multi_panel=True)
+
+```
+
+## Top 20 genes
+
+```{python}
+sc.pl.highest_expr_genes(adata, n_top=20)
+```
+
+## Ratio of counts to number of mitochondrial genes
+
+```{python}
+sc.pl.scatter(adata, x='n_counts', y='percent_mito', color='patient')
+sc.pl.scatter(adata, x='n_counts', y='n_genes', color='patient')
+```
+
+```{python}
+(ggplot(adata.obs, aes(x='rk_n_genes', y='n_genes', color='patient')) + 
+   geom_point() + 
+   geom_hline(yintercept=MIN_GENES) + 
+   geom_hline(yintercept=MAX_GENES))
+```
+
+```{python}
+(ggplot(adata.obs, aes(x='rk_percent_mito', y='percent_mito', color='patient')) + 
+   geom_point() + 
+   geom_hline(yintercept=MAX_MITO))
+```
+
+## doublet detection
+
+```{python}
+scrub = scr.Scrublet(adata.X)
+doublet_scores, predicted_doublets = scrub.scrub_doublets()
+```
+
+```{python}
+doublet_scores
+```
+
+```{python}
+scrub.plot_histogram()
+```
+
+```{python}
+adata.obs["doublet_score"] = doublet_scores
+adata.obs["predicted_doublets"] = predicted_doublets
+```
+
+## Actually do the filtering
+
+```{python}
+adata.shape
+```
+
+```{python}
+sc.pp.filter_genes(adata, min_cells=1)
+```
+
+```{python}
+adata.shape
+```
+
+```{python}
+sc.pp.filter_cells(adata, min_genes=MIN_GENES)
+print(adata.shape[0])
+```
+
+```{python}
+sc.pp.filter_cells(adata, max_genes=MAX_GENES)
+print(adata.shape[0])
+```
+
+```{python}
+adata = adata[adata.obs['percent_mito'] < MAX_MITO, :]
+print(adata.shape[0])
+```
+
+```{python}
+sc.pl.violin(adata, ['n_genes', 'n_dropouts', 'n_counts', 'percent_mito'],
+             jitter=0.4, multi_panel=True)
+
+```
+
+```{python}
+sc.pl.scatter(adata, x='n_counts', y='percent_mito', color='patient')
+sc.pl.scatter(adata, x='n_counts', y='n_genes', color='patient')
+```
+
+### Normalize while keeping the raw data
+
+```{python}
+adata.raw = sc.pp.log1p(adata, copy=True)
+adata_raw = adata.copy()
+```
+
+```{python}
+sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
+sc.pp.log1p(adata)
+a2 = sc.pp.scale(adata, copy=True)
+```
+
+## Confounders
+
+
+## cell cycle
+
+```{python}
+cell_cycle_regev = pd.read_csv("../tables/cell_cycle_regev.tsv", sep="\t")
+cell_cycle_regev = cell_cycle_regev.join(biomart.set_index("HGNC symbol"), on=["hgnc_symbol"], how="inner")\
+                        [["Gene stable ID", "phase"]].\
+                        drop_duplicates()
+```
+
+```{python}
+cell_cycle_griph = pd.read_csv("../tables/cell_cycle_griph.tsv", sep="\t")
+cell_cycle_griph = cell_cycle_griph.join(biomart.set_index("NCBI gene ID"), on=["entrez"], how="left")\
+                        [["Gene stable ID", "phase"]].\
+                        drop_duplicates()
+```
+
+```{python}
+sc.tl.score_genes_cell_cycle(adata, 
+                             s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","Gene stable ID"].values,
+                             g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","Gene stable ID"].values)
+```
+
+```{python}
+cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
+adata_cc_genes = adata[:, cc_genes]
+sc.tl.pca(adata_cc_genes)
+sc.pl.pca_scatter(adata_cc_genes, color='phase')
+```
+
+## Visualizations
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pl.pca(adata, color=['patient', 'phase'])
+```
+
+```{python}
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
+```
+
+```{python}
+sc.pl.umap(adata, color=["patient", "n_counts"])
+sc.pl.umap(adata, color=["tissue", "replicate"])
+```
+
+```{python}
+sc.pl.umap(adata, color=["n_genes", "percent_mito"])
+```
+
+```{python}
+sc.pl.umap(adata, color=["phase"])
+```
+
+```{python}
+
+```
+
+```{python}
+
+```

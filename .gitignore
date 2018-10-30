@@ -8,3 +8,6 @@ plots
 .ipynb_checkpoints
 results
 *.ipynb
+__pycache__
+*.pyc
+*.pyo

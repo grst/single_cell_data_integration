@@ -30,6 +30,7 @@ from pylab import subplots
 import sys
 sys.path.append("../lib")
 from jupytertools import *
+import sklearn.metrics as skm
 ```
 
 ```{python}
@@ -38,12 +39,22 @@ biomart = pd.read_csv("../tables/biomart.tsv", sep="\t")
 ```
 
 ```{python}
-adata = sc.read_h5ad("../results/data_processed/azizi_peer_2018/adata.h5ad")
+DATASET = "lambrechts_2018_6149_v2"
 ```
 
 ```{python}
-MAX_GENES = 4000
-MIN_GENES = 200
+CONFOUNDER_COLS = "Patient"
+```
+
+```{python}
+adata = sc.read_h5ad("../results/data_processed/{}/adata.h5ad".format(DATASET))
+```
+
+```{python}
+# MAX_GENES = 4000
+# MIN_GENES = 200
+MAX_GENES = 6000
+MIN_GENES = 500
 MAX_MITO = 0.15
 ```
 
@@ -52,12 +63,17 @@ adata
 ```
 
 ```{python}
+# very rough pre-filtering (for completely unfiltered datasets)
+sc.pp.filter_cells(adata, min_genes=10)
+adata.shape
+```
+
+```{python}
 tmp_mito = [g for g in mito_genes if g in adata.var_names]
 adata.obs['percent_mito'] = np.sum(
     adata[:, tmp_mito].X, axis=1) / np.sum(adata.X, axis=1)
 # add the total counts per cell as observations-annotation to adata
 adata.obs['n_counts'] = adata.X.sum(axis=1)
-adata.obs['n_dropouts'] = (adata.X == 0).sum(axis=1)
 adata.obs['n_genes'] = (adata.X != 0).sum(axis=1)
 adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False)
 adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True)
@@ -66,7 +82,7 @@ adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True)
 ## Library size and number of detected genes.
 
 ```{python}
-sc.pl.violin(adata, ['n_genes', 'n_dropouts', 'n_counts', 'percent_mito'],
+sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
              jitter=0.4, multi_panel=True)
 
 ```
@@ -80,52 +96,25 @@ sc.pl.highest_expr_genes(adata, n_top=20)
 ## Ratio of counts to number of mitochondrial genes
 
 ```{python}
-sc.pl.scatter(adata, x='n_counts', y='percent_mito', color='patient')
-sc.pl.scatter(adata, x='n_counts', y='n_genes', color='patient')
+sc.pl.scatter(adata, x='n_counts', y='percent_mito', color='sample')
+sc.pl.scatter(adata, x='n_counts', y='n_genes', color='sample')
 ```
 
 ```{python}
-(ggplot(adata.obs, aes(x='rk_n_genes', y='n_genes', color='patient')) + 
+(ggplot(adata.obs, aes(x='rk_n_genes', y='n_genes', color='sample')) + 
    geom_point() + 
    geom_hline(yintercept=MIN_GENES) + 
    geom_hline(yintercept=MAX_GENES))
 ```
 
 ```{python}
-(ggplot(adata.obs, aes(x='rk_percent_mito', y='percent_mito', color='patient')) + 
+(ggplot(adata.obs, aes(x='rk_percent_mito', y='percent_mito', color='sample')) + 
    geom_point() + 
    geom_hline(yintercept=MAX_MITO))
 ```
 
-## doublet detection
-
-```{python}
-scrub = scr.Scrublet(adata.X)
-doublet_scores, predicted_doublets = scrub.scrub_doublets()
-```
-
-```{python}
-doublet_scores
-```
-
-```{python}
-scrub.plot_histogram()
-```
-
-```{python}
-adata.obs["doublet_score"] = doublet_scores
-adata.obs["predicted_doublets"] = predicted_doublets
-```
 
 ## Actually do the filtering
-
-```{python}
-adata.shape
-```
-
-```{python}
-sc.pp.filter_genes(adata, min_cells=1)
-```
 
 ```{python}
 adata.shape
@@ -147,19 +136,47 @@ print(adata.shape[0])
 ```
 
 ```{python}
-sc.pl.violin(adata, ['n_genes', 'n_dropouts', 'n_counts', 'percent_mito'],
+sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
              jitter=0.4, multi_panel=True)
 
 ```
 
 ```{python}
-sc.pl.scatter(adata, x='n_counts', y='percent_mito', color='patient')
-sc.pl.scatter(adata, x='n_counts', y='n_genes', color='patient')
+sc.pl.scatter(adata, x='n_counts', y='percent_mito', color='sample')
+sc.pl.scatter(adata, x='n_counts', y='n_genes', color='sample')
+```
+
+
+## doublet detection
+
+```{python}
+scrub = scr.Scrublet(adata.X)
+doublet_scores, predicted_doublets = scrub.scrub_doublets()
+```
+
+```{python}
+doublet_scores
+```
+
+```{python}
+scrub.plot_histogram()
+```
+
+```{python}
+adata.obs["doublet_score"] = doublet_scores
+adata.obs["predicted_doublets"] = predicted_doublets
+```
+
+```{python}
+print(adata.shape)
+adata = adata[~adata.obs['predicted_doublets'], :]
+print(adata.shape)
 ```
 
 ### Normalize while keeping the raw data
 
 ```{python}
+sc.pp.filter_genes(adata, min_cells=1)
 adata.raw = sc.pp.log1p(adata, copy=True)
 adata_raw = adata.copy()
 ```
@@ -186,7 +203,8 @@ cell_cycle_regev = cell_cycle_regev.join(biomart.set_index("HGNC symbol"), on=["
 cell_cycle_griph = pd.read_csv("../tables/cell_cycle_griph.tsv", sep="\t")
 cell_cycle_griph = cell_cycle_griph.join(biomart.set_index("NCBI gene ID"), on=["entrez"], how="left")\
                         [["Gene stable ID", "phase"]].\
-                        drop_duplicates()
+                        drop_duplicates().\
+                        dropna()
 ```
 
 ```{python}
@@ -196,17 +214,31 @@ sc.tl.score_genes_cell_cycle(adata,
 ```
 
 ```{python}
+phases = cell_cycle_griph["phase"].unique()
+ctrl_size = int(cell_cycle_griph.groupby("phase").count().min())
+for phase in phases: 
+    sc.tl.score_genes(adata,
+                gene_list=cell_cycle_griph.loc[cell_cycle_griph["phase"] == phase, "Gene stable ID"], 
+                ctrl_size=ctrl_size,
+                score_name="{}_griph".format(phase))
+    
+scores = adata.obs[["{}_griph".format(phase) for phase in phases]]
+adata.obs["griph_phase"] = [x.split("_")[0] for x in scores.idxmax(axis="columns")]
+
+```
+
+```{python}
 cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
 adata_cc_genes = adata[:, cc_genes]
 sc.tl.pca(adata_cc_genes)
-sc.pl.pca_scatter(adata_cc_genes, color='phase')
+sc.pl.pca_scatter(adata_cc_genes, color=['phase', 'griph_phase'])
 ```
 
 ## Visualizations
 
 ```{python}
 sc.tl.pca(adata, svd_solver='arpack')
-sc.pl.pca(adata, color=['patient', 'phase'])
+sc.pl.pca(adata, color=['sample', 'phase', "griph_phase"])
 ```
 
 ```{python}
@@ -215,8 +247,9 @@ sc.tl.umap(adata)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["patient", "n_counts"])
-sc.pl.umap(adata, color=["tissue", "replicate"])
+sc.pl.umap(adata, color=["sample", "n_counts"])
+# sc.pl.umap(adata, color=["sampleType"])
+# sc.pl.umap(adata, color=["tissue", "replicate"])
 ```
 
 ```{python}
@@ -224,11 +257,71 @@ sc.pl.umap(adata, color=["n_genes", "percent_mito"])
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["phase"])
+sc.pl.umap(adata, color=["phase", "griph_phase"])
 ```
 
 ```{python}
+sc.pp.regress_out(adata, ['S_score', 'G2M_score'])
+sc.pp.scale(adata)
+```
 
+```{python}
+cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
+adata_cc_genes = adata[:, cc_genes]
+sc.tl.pca(adata_cc_genes)
+sc.pl.pca_scatter(adata_cc_genes, color=['phase', 'griph_phase'])
+```
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
+sc.pl.umap(adata, color=["phase", "griph_phase"])
+```
+
+## visualize marker genes
+We use marker genes from MCP counter to preliminarly identify cell types in the dataset. 
+The score is very basic, it's the mean sum of all marker genes.
+
+```{python}
+mcp_sig = pd.read_csv("https://raw.githubusercontent.com/ebecht/MCPcounter/master/Signatures/genes.txt", sep="\t")
+mcp_ensembl = mcp_sig.set_index("HUGO symbols").join(biomart.set_index("HGNC symbol"), how="inner")[["Cell population", "Gene stable ID"]]
+```
+
+```{python}
+cell_types = mcp_ensembl["Cell population"].unique()
+for cell_type in cell_types: 
+    markers = mcp_ensembl.loc[mcp_ensembl["Cell population"] == cell_type, "Gene stable ID"].values
+    markers_in_adata = [m for m in markers if m in adata.var_names]
+    print("{}: Ignored {}/{} genes because they are not in var_names".format(cell_type,
+                    len(markers)-len(markers_in_adata), len(markers)))
+    adata.obs[cell_type] = np.sum(adata.X[:,adata.var_names.isin(markers_in_adata)], axis=1)/len(markers_in_adata)
+    
+scores = adata.obs[[ct for ct in cell_types if ct in adata.obs.columns]]
+adata.obs["cell_type"] = scores.idxmax(axis="columns")
+
+```
+
+```{python}
+sc.pl.umap(adata, color=["cell_type"])
+```
+
+```{python}
+sc.pl.umap(adata, color=[ct for ct in cell_types if ct in adata.obs.columns], ncols=2)
+```
+
+## Louvain clustering and silhouette score
+
+```{python}
+sc.tl.louvain(adata)
+```
+
+```{python}
+sc.pl.umap(adata, color='louvain')
+```
+
+```{python}
+skm.silhouette_score(adata.X, adata.obs["louvain"], sample_size=2000)
 ```
 
 ```{python}

@@ -4,7 +4,7 @@ from anndata import AnnData
 import os.path
 import sys
 sys.path.append("lib")
-from scio import check_obs
+from scio import check_obs, check_var
 
 DATASET = "zheng_bileas_2017"
 COUNT_FILE = "data/{}/".format(DATASET)
@@ -20,6 +20,7 @@ adata.obs = adata.obs.assign(sample = "1")\
                      .assign(tumor_type = "PBMC")
 
 check_obs(adata)
+check_var(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
 adata.write_csvs(OUTPUT_DIR)

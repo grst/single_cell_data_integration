@@ -41,7 +41,7 @@ def read_10x_mtx(basename, var_names="gene_symbols"):
         adata.var['gene_ids'] = genes[0].values
     else:
         adata.var_names = genes[0]
-        adata.var['gene_names'] = genes[1].values
+        adata.var['gene_symbols'] = genes[1].values
 
     return adata
 
@@ -121,3 +121,16 @@ def check_obs(adata):
     other = ["PBMC", "NSCLC"]
     assert np.all(obs["tumor_type"].isin(tcga + other)), \
                 "invalid word in column tumor_type"
+
+
+def check_var(adata):
+    """
+    Check that the adata.var follows the conventions of thie project
+    """
+    assert adata.var_names.is_unique, "Var names must be unique"
+
+    assert np.all(x[:4] == ENSG for x in adata.var_names), \
+            "var names must be ensemble gene identifiers"
+
+    assert "gene_symbols" in adata.var.columns, \
+            "var must contain a gene_symbols column"

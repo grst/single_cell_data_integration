@@ -6,7 +6,7 @@ import numpy as np
 from gene_identifiers import map_to_ensembl
 import sys
 sys.path.append("lib")
-from scio import check_obs
+from scio import check_obs, check_var
 
 DATASET = "guo_zhang_2018"
 COUNT_FILE = "data/{}/GSE99254_NSCLC.TCell.S12346.count.txt.gz".format(DATASET)
@@ -47,7 +47,7 @@ obs = obs.set_index("UniqueCell_ID")
 raw_counts = pd.read_csv(COUNT_FILE, sep="\t")
 
 # for now we use gene symbols here. Remove all rows that don't have
-# a gene symbol. 
+# a gene symbol.
 var = raw_counts[["geneID", "symbol"]].set_index("symbol")
 
 idx = ~var.index.isnull()
@@ -56,6 +56,7 @@ adata = AnnData(raw_counts.iloc[idx, 2:].values.transpose(), obs, var[idx])
 adata = map_to_ensembl(adata)
 
 check_obs(adata)
+check_var(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
 adata.write_csvs(OUTPUT_DIR)

@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import sys
 sys.path.append("lib")
-from scio import concatenate, check_obs
+from scio import concatenate, check_obs, check_var
 
 DATASET = "lambrechts_2018_6653"
 OBS_DATA = "raw/{}/samples.csv".format(DATASET)
@@ -36,20 +36,21 @@ obs = obs.assign(origin = obs["origin"].apply(lambda x: origin_map[x]))\
 dataset_samples = obs["sample"].values
 
 
-filenames = ["raw/{}/data/cellranger/{}/outs/raw_gene_bc_matrices_h5.h5".format(DATASET, sample) 
+filenames = ["raw/{}/data/cellranger/{}/outs/raw_gene_bc_matrices_h5.h5".format(DATASET, sample)
              for sample in dataset_samples]
 
 adatas = [sc.read_10x_h5(filename, genome="GRCh38") for filename in filenames]
 
 for adata, sample in zip(adatas, dataset_samples):
-    adata.var['gene_name'] = adata.var_names
+    adata.var['gene_symbols'] = adata.var_names
     adata.var.set_index("gene_ids", inplace=True)
     adata.obs['sample'] = sample
-    
-adata = concatenate(adatas, merge_var_cols=["gene_name"])
+
+adata = concatenate(adatas, merge_var_cols=["gene_symbols"])
 adata.obs = adata.obs.join(obs.set_index("sample"), on="sample", how="left")
 
 check_obs(adata)
+check_var(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression="lzf")
 adata.write_csvs(OUTPUT_DIR)

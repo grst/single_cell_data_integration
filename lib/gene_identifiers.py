@@ -26,7 +26,7 @@ def map_to_ensembl(adata, fun=max):
 
     adata = adata[:, var_df_ensg_nona_nodups.index.values]
 
-    adata.var["gene_name"] = adata.var_names
+    adata.var["gene_symbols"] = adata.var_names
     adata.var_names = var_df_ensg_nona_nodups["ensg"]
 
     return adata

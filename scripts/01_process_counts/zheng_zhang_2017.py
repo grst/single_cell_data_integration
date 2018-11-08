@@ -5,7 +5,7 @@ import os.path
 from gene_identifiers import map_to_ensembl
 import sys
 sys.path.append("lib")
-from scio import check_obs
+from scio import check_obs, check_var
 
 DATASET = "zheng_zhang_2017"
 COUNT_FILE = "data/{}/GSE98638_HCC.TCell.S5063.count.txt.gz".format(DATASET)
@@ -52,6 +52,7 @@ adata = AnnData(raw_counts.iloc[:, 2:].values.transpose(), obs, var)
 adata = map_to_ensembl(adata)
 
 check_obs(adata)
+check_var(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
 adata.write_csvs(OUTPUT_DIR)

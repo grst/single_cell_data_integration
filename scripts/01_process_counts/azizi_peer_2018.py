@@ -4,7 +4,7 @@ from anndata import AnnData
 import os.path
 import sys
 sys.path.append("lib")
-from scio import check_obs
+from scio import check_obs, check_var
 
 from gene_identifiers import map_to_ensembl
 
@@ -16,12 +16,12 @@ raw_counts = pd.read_csv(COUNT_FILE)
 
 obs = raw_counts[["patient", "tissue", "replicate", "cluster", "cellid"]]
 
-obs = obs.assign(cell_name = ["_".join((str(p), str(i))) 
+obs = obs.assign(cell_name = ["_".join((str(p), str(i)))
                              for p, i in zip(obs.patient, obs.cellid)])\
         .assign(origin = "tumor_primary")\
         .assign(platform = "indrop_v2")\
         .assign(tumor_type = "BRCA")
-                
+
 obs = obs.assign(sample = obs[["patient", "origin", "replicate"]].apply(lambda x: "_".join([str(k) for k in x]), axis=1))
 
 obs = obs.set_index("cell_name")
@@ -34,6 +34,7 @@ adata = AnnData(mat.values, obs, var)
 adata = map_to_ensembl(adata)
 
 check_obs(adata)
+check_var(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
 adata.write_csvs(OUTPUT_DIR)

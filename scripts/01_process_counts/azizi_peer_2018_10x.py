@@ -3,27 +3,29 @@ import scanpy as sc
 from anndata import AnnData
 import os.path
 from gene_identifiers import map_to_ensembl
+import sys
+sys.path.append("lib")
+from scio import read_10x_mtx, concatenate
 
 DATASET = "azizi_peer_2018_10x"
-COUNT_FILE = "data/{}/GSE114724_raw_counts.tsv".format(DATASET)
+OBS_DATA = "tables/datasets/{}_obs.tsv".format(DATASET)
+MTX_BASENAME = "data/{}/{sample}_{patient}_TUMOR{replicate}"
 OUTPUT_DIR = "results/data_processed/{}/".format(DATASET)
 
-patients = pd.read_csv(COUNT_FILE, sep="\t", nrows=1, header=None)
-patients = patients.values[0,1:]
-raw_counts = pd.read_csv(COUNT_FILE, sep="\t", skiprows=1)
-raw_counts = raw_counts.rename({"Sample_Barcodes": "gene_symbol"}, axis="columns")
-raw_counts = raw_counts.set_index("gene_symbol")
-barcodes = raw_counts.columns.values
+obs = pd.read_csv(OBS_DATA, sep="\t")
 
-# obs = patients / cells
-obs = pd.DataFrame().assign(barcode=barcodes, patient=patients)
-obs = obs.set_index("barcode")
+# merge 10x
+adatas = []
+for i, row in obs.iterrows():
+    filename = MTX_BASENAME.format(DATASET, sample=row['sample'], patient=row['patient'],
+                                 replicate=row['replicate'])
+    adata = read_10x_mtx(filename, var_names="gene_ids")
+    adata.obs["sample"] = row["sample"]
+    adatas.append(adata)
+    
+adata = concatenate(adatas, merge_var_cols=["gene_names"])
 
-# var = genes / transcripts
-var = pd.DataFrame().assign(gene_symbol = raw_counts.index.values).set_index("gene_symbol")
+adata.obs = adata.obs.join(obs.set_index('sample'), on="sample", how="left")
 
-adata = AnnData(raw_counts.values.transpose(), obs, var)
-adata = map_to_ensembl(adata)
-
-adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
+adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression="lzf")
 adata.write_csvs(OUTPUT_DIR)

@@ -11,8 +11,15 @@ OUTPUT_DIR = "results/data_processed/{}/".format(DATASET)
 
 raw_counts = pd.read_csv(COUNT_FILE)
 
-obs = raw_counts[["patient", "tissue", "replicate", "cluster", "cellid"]]
-obs = obs.assign(cell_name = ["_".join((str(p), str(i))) for p, i in zip(obs.patient, obs.cellid)])
+obs = raw_counts[["patient", "tissue", "replicate", "cluster", "cellid"]]\
+        .assign(cell_name = ["_".join((str(p), str(i))) 
+                             for p, i in zip(obs.patient, obs.cellid)])\
+        .assign(origin = "tumor_primary")\
+        .assign(platform = "indrop_v2")\
+        .assign(tumor_type = "BRCA")
+                
+obs = obs.assign(sample = obs[["patient", "origin", "replicate"]].apply(lambda x: "_".join([str(k) for k in x]), axis=1))
+
 obs = obs.set_index("cell_name")
 
 mat = raw_counts.iloc[:,5:]

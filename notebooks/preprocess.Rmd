@@ -44,10 +44,6 @@ DATASET = "lambrechts_2018_6149_v2"
 ```
 
 ```{python}
-CONFOUNDER_COLS = "Patient"
-```
-
-```{python}
 adata = sc.read_h5ad("../results/data_processed/{}/adata.h5ad".format(DATASET))
 ```
 
@@ -83,6 +79,10 @@ adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True, me
 ## Library size and number of detected genes.
 
 ```{python}
+adata.var_names.is_unique
+```
+
+```{python}
 sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
              jitter=0.4, multi_panel=True)
 
@@ -91,7 +91,7 @@ sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
 ## Top 20 genes
 
 ```{python}
-ax = sc.pl.highest_expr_genes(adata, n_top=20, show=False, annot_col="gene_name-0")
+ax = sc.pl.highest_expr_genes(adata, n_top=20, show=False, annot_col="gene_name")
 ```
 
 ## Ratio of counts to number of mitochondrial genes
@@ -207,45 +207,26 @@ cell_cycle_regev = cell_cycle_regev.join(biomart.set_index("HGNC symbol"), on=["
 ```
 
 ```{python}
-cell_cycle_griph = pd.read_csv("../tables/cell_cycle_griph.tsv", sep="\t")
-cell_cycle_griph = cell_cycle_griph.join(biomart.set_index("NCBI gene ID"), on=["entrez"], how="left")\
-                        [["Gene stable ID", "phase"]].\
-                        drop_duplicates().\
-                        dropna()
-```
-
-```{python}
 sc.tl.score_genes_cell_cycle(adata, 
                              s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","Gene stable ID"].values,
                              g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","Gene stable ID"].values)
 ```
 
 ```{python}
-phases = cell_cycle_griph["phase"].unique()
-ctrl_size = int(cell_cycle_griph.groupby("phase").count().min())
-for phase in phases: 
-    sc.tl.score_genes(adata,
-                gene_list=cell_cycle_griph.loc[cell_cycle_griph["phase"] == phase, "Gene stable ID"], 
-                ctrl_size=ctrl_size,
-                score_name="{}_griph".format(phase))
-    
-scores = adata.obs[["{}_griph".format(phase) for phase in phases]]
-adata.obs["griph_phase"] = [x.split("_")[0] for x in scores.idxmax(axis="columns")]
-
-```
-
-```{python}
 cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
 adata_cc_genes = adata[:, cc_genes]
 sc.tl.pca(adata_cc_genes)
-sc.pl.pca_scatter(adata_cc_genes, color=['phase', 'griph_phase'])
+sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
 ```
 
 ## Visualizations
 
 ```{python}
 sc.tl.pca(adata, svd_solver='arpack')
-sc.pl.pca(adata, color=['sample', 'phase', "griph_phase"])
+```
+
+```{python}
+sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
 ```
 
 ```{python}
@@ -254,18 +235,11 @@ sc.tl.umap(adata)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["sample", "n_counts"])
-# sc.pl.umap(adata, color=["sampleType"])
-# sc.pl.umap(adata, color=["tissue", "replicate"])
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
 ```
 
-```{python}
-sc.pl.umap(adata, color=["n_genes", "percent_mito"])
-```
-
-```{python}
-sc.pl.umap(adata, color=["phase", "griph_phase"])
-```
+## Remove confounders
+### Cell cycle
 
 ```{python}
 sc.pp.regress_out(adata, ['S_score', 'G2M_score'])
@@ -283,7 +257,10 @@ sc.pl.pca_scatter(adata_cc_genes, color=['phase', 'griph_phase'])
 sc.tl.pca(adata, svd_solver='arpack')
 sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
 sc.tl.umap(adata)
-sc.pl.umap(adata, color=["phase", "griph_phase"])
+```
+
+```{python}
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
 ```
 
 ## visualize marker genes

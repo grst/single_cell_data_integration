@@ -5,7 +5,7 @@ import os.path
 from gene_identifiers import map_to_ensembl
 import sys
 sys.path.append("lib")
-from scio import read_10x_mtx, concatenate
+from scio import read_10x_mtx, concatenate, check_obs
 
 DATASET = "savas_loi_2018"
 BASENAME = "data/{}/unmerged/{}"
@@ -27,6 +27,8 @@ for i, sample in enumerate(samples):
     adatas.append(adata)
     
 adata = concatenate(adatas, merge_var_cols=["gene_names"])
+
+check_obs(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
 adata.write_csvs(OUTPUT_DIR)

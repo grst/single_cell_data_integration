@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import sys
 sys.path.append("lib")
-from scio import concatenate
+from scio import concatenate, check_obs
 
 DATASET = "lambrechts_2018_6149_v2"
 OBS_DATA = "raw/{}/samples.csv".format(DATASET)
@@ -48,6 +48,8 @@ for adata, sample in zip(adatas, dataset_samples):
     
 adata = concatenate(adatas, merge_var_cols=["gene_name"])
 adata.obs = adata.obs.join(obs.set_index("sample"), on="sample", how="left")
+
+check_obs(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression="lzf")
 adata.write_csvs(OUTPUT_DIR)

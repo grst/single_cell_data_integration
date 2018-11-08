@@ -85,3 +85,39 @@ def concatenate(adatas, merge_var_cols=None, **kwargs):
         adata.var[col_name] = cols[col_name]
 
     return adata
+
+
+def check_obs(adata):
+    """
+    Check that the columns in obs follow
+    the naming conventions.
+    """
+    obs = adata.obs
+    mandatory_cols = ["sample", "patient", "origin",
+            "replicate", "platform", "tumor_type"]
+    for col in mandatory_cols:
+        assert col in obs.columns, "{} is a mandatory column".format(col)
+        assert np.sum(obs[col].isnull()) == 0, "NAs in column {}".format(col)
+
+    # check sample columns
+    sample_count = obs.groupby(["patient", "origin", "replicate"])['sample'].nunique()
+
+    assert np.all(sample_count == 1), \
+            "sample must be unique for each patient, origin and replicate"
+
+    # check CV
+    assert np.all(obs["origin"].isin(["tumor_primary", "normal_adjacent",
+        "tumor_edge", "blood_peripheral"])), "invalid word in column origin"
+
+    assert np.all(obs["platform"].isin(["10x_3p", "10x_3p_v2", "10x_5p",
+        "indrop_v2", "smartseq2"])), "invalid word in column platform"
+
+
+    tcga = ["LAML", "ACC", "BLCA", "LGG", "BRCA",
+        "CESC", "CHOL", "LCML", "COAD", "CNTL",
+        "ESCA", "FPPP", "GBM", "HNSC", "KICH", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC",
+        "DLBC", "MESO", "MISC", "OV", "PAAD", "PCPG", "PRAD", "READ", "SARC", "SKCM",
+        "STAD", "TGCT", "THYM", "THCA", "UCS", "UCEC", "UVM"]
+    other = ["PBMC", "NSCLC"]
+    assert np.all(obs["tumor_type"].isin(tcga + other)), \
+                "invalid word in column tumor_type"

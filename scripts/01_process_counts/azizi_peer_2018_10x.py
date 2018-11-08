@@ -5,7 +5,7 @@ import os.path
 from gene_identifiers import map_to_ensembl
 import sys
 sys.path.append("lib")
-from scio import read_10x_mtx, concatenate
+from scio import read_10x_mtx, concatenate, check_obs
 
 DATASET = "azizi_peer_2018_10x"
 OBS_DATA = "tables/datasets/{}_obs.tsv".format(DATASET)
@@ -26,6 +26,8 @@ for i, row in obs.iterrows():
 adata = concatenate(adatas, merge_var_cols=["gene_names"])
 
 adata.obs = adata.obs.join(obs.set_index('sample'), on="sample", how="left")
+
+check_obs(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression="lzf")
 adata.write_csvs(OUTPUT_DIR)

@@ -4,6 +4,9 @@ from anndata import AnnData
 import os.path
 import numpy as np
 from gene_identifiers import map_to_ensembl
+import sys
+sys.path.append("lib")
+from scio import check_obs
 
 DATASET = "guo_zhang_2018"
 COUNT_FILE = "data/{}/GSE99254_NSCLC.TCell.S12346.count.txt.gz".format(DATASET)
@@ -51,6 +54,8 @@ idx = ~var.index.isnull()
 
 adata = AnnData(raw_counts.iloc[idx, 2:].values.transpose(), obs, var[idx])
 adata = map_to_ensembl(adata)
+
+check_obs(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
 adata.write_csvs(OUTPUT_DIR)

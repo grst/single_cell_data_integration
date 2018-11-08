@@ -2,6 +2,9 @@ import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 import os.path
+import sys
+sys.path.append("lib")
+from scio import check_obs
 
 from gene_identifiers import map_to_ensembl
 
@@ -29,6 +32,8 @@ var = pd.DataFrame().assign(gene_symbol = mat.columns).set_index("gene_symbol")
 
 adata = AnnData(mat.values, obs, var)
 adata = map_to_ensembl(adata)
+
+check_obs(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
 adata.write_csvs(OUTPUT_DIR)

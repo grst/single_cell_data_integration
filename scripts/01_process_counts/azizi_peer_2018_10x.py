@@ -11,9 +11,9 @@ DATASET = "azizi_peer_2018_10x"
 OBS_DATA = "tables/datasets/{}_obs.tsv".format(DATASET)
 MTX_BASENAME = "data/{}/{sample}_{patient}_TUMOR{replicate}"
 OUTPUT_DIR = "results/data_processed/{}/".format(DATASET)
-
+ 
 obs = pd.read_csv(OBS_DATA, sep="\t")
-
+    
 # merge 10x
 adatas = []
 for i, row in obs.iterrows():

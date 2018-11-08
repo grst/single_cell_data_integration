@@ -11,8 +11,9 @@ OUTPUT_DIR = "results/data_processed/{}/".format(DATASET)
 
 raw_counts = pd.read_csv(COUNT_FILE)
 
-obs = raw_counts[["patient", "tissue", "replicate", "cluster", "cellid"]]\
-        .assign(cell_name = ["_".join((str(p), str(i))) 
+obs = raw_counts[["patient", "tissue", "replicate", "cluster", "cellid"]]
+
+obs = obs.assign(cell_name = ["_".join((str(p), str(i))) 
                              for p, i in zip(obs.patient, obs.cellid)])\
         .assign(origin = "tumor_primary")\
         .assign(platform = "indrop_v2")\

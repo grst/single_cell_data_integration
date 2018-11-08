@@ -1,6 +1,6 @@
 sample	patient	origin	replicate	tumor_type	platform
-GSM3148578	BC11	tumor_primary	1	BRCA	10x_3p
-GSM3148576	BC09	tumor_primary	2	BRCA	10x_3p
-GSM3148579	BC11	tumor_primary	2	BRCA	10x_3p
-GSM3148575	BC09	tumor_primary	1	BRCA	10x_3p
-GSM3148577	BC10	tumor_primary	1	BRCA	10x_3p
+GSM3148578	BC11	tumor_primary	1	BRCA	10x_5p
+GSM3148576	BC09	tumor_primary	2	BRCA	10x_5p
+GSM3148579	BC11	tumor_primary	2	BRCA	10x_5p
+GSM3148575	BC09	tumor_primary	1	BRCA	10x_5p
+GSM3148577	BC10	tumor_primary	1	BRCA	10x_5p

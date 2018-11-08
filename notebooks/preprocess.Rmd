@@ -36,6 +36,7 @@ import sklearn.metrics as skm
 ```{python}
 mito_genes = pd.read_csv("../tables/mitochondrial_genes.tsv", sep="\t")["Gene stable ID"].values
 biomart = pd.read_csv("../tables/biomart.tsv", sep="\t")
+ribo_genes = pd.read_csv("../tables/ribosomal_genes.tsv", sep="\t", comment="#")["Gene stable ID"].values
 ```
 
 ```{python}
@@ -75,8 +76,8 @@ adata.obs['percent_mito'] = np.sum(
 # add the total counts per cell as observations-annotation to adata
 adata.obs['n_counts'] = adata.X.sum(axis=1)
 adata.obs['n_genes'] = (adata.X != 0).sum(axis=1)
-adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False)
-adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True)
+adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False, method="dense")
+adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True, method="dense")
 ```
 
 ## Library size and number of detected genes.
@@ -90,7 +91,7 @@ sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
 ## Top 20 genes
 
 ```{python}
-sc.pl.highest_expr_genes(adata, n_top=20)
+ax = sc.pl.highest_expr_genes(adata, n_top=20, show=False, annot_col="gene_name-0")
 ```
 
 ## Ratio of counts to number of mitochondrial genes
@@ -139,6 +140,12 @@ print(adata.shape[0])
 sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
              jitter=0.4, multi_panel=True)
 
+```
+
+```{python}
+# exclude ribosomal and mitochondrial genes
+adata = adata[:, ~adata.var_names.isin(np.append(mito_genes, ribo_genes))]
+print(adata.shape)
 ```
 
 ```{python}
@@ -284,7 +291,7 @@ We use marker genes from MCP counter to preliminarly identify cell types in the 
 The score is very basic, it's the mean sum of all marker genes.
 
 ```{python}
-mcp_sig = pd.read_csv("https://raw.githubusercontent.com/ebecht/MCPcounter/master/Signatures/genes.txt", sep="\t")
+mcp_sig = pd.read_csv("../tables/mcp_counter_signatures.txt", sep="\t")
 mcp_ensembl = mcp_sig.set_index("HUGO symbols").join(biomart.set_index("HGNC symbol"), how="inner")[["Cell population", "Gene stable ID"]]
 ```
 

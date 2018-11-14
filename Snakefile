@@ -14,29 +14,17 @@ The datasets and their identifiers are defined in `tables/datasets.tsv`
 
 import pandas as pd
 import os.path as path
+from lib.snakemaketools import render_rmarkdown
+
+ROOT = path.abspath(path.dirname(workflow.snakefile))
 
 # define the datasets
 DATA_PATH = "results/data_processed/"
-DATASETS = pd.read_csv("tables/datasets.tsv", sep="\t")["id"].values
+DATA_PATH_FILTERED = "results/data_filtered"
+# DATASETS: dict-like {'zheng_zhang_2017': {'min_genes': 200, 'max_genes':6000, ...}, ...}
+DATASETS = pd.read_csv("tables/datasets.tsv", sep="\t", index_col=0).to_dict(orient="index")
 
 
 include: "pipeline_stages/01_process_counts.smk"
+include: "pipeline_stages/02_filter_data.smk"
 
-
-rule render_rmd:
-   """render a single rmarkdown document to it's
-   corresponding HTML"""
-   input:
-      "notebooks/{doc}.Rmd"
-   output:
-      "results/reports/{doc}.html"
-   conda:
-      "envs/rmarkdown.yml"
-   shell:
-      """
-      cd notebooks && \\
-      Rscript -e "reportsdown::render_reports('{input}', \\
-        output_file='../{output}', \\
-        output_format=reportsdown::html_document2(), \\
-        preview=TRUE)"
-      """

@@ -1,9 +1,9 @@
-id	min_genes	max_genes	max_frac_mito	patient_col
-savas_loi_2018				
-zheng_bileas_2017				
-azizi_peer_2018_10x				
-azizi_peer_2018				
-zheng_zhang_2017				
-guo_zhang_2018				
-lambrechts_2018_6149_v2				
-lambrechts_2018_6653				
+"id"	"min_genes"	"max_genes"	"max_frac_mito"
+"savas_loi_2018"	300	4000	0.06
+"zheng_bileas_2017"	200	2000	0.06
+"azizi_peer_2018_10x"	500	5000	0.09
+"azizi_peer_2018"	200	4000	0.15
+"zheng_zhang_2017"	800	5500	1
+"guo_zhang_2018"	800	5500	1
+"lambrechts_2018_6149_v2"	200	6000	0.09
+"lambrechts_2018_6653"	200	5000	0.09

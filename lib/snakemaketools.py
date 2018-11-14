@@ -3,6 +3,7 @@ Module containing helper functions to build Snakemake rules
 """
 
 from snakemake import shell
+import os
 
 
 def _literal_to_r_str(value):
@@ -46,13 +47,12 @@ def render_rmarkdown(input_file, output_file, root_dir, params=None):
         "Rscript -e \"rmarkdown::render('{input_file}', "
         "   output_file='{output_file}', "
         "   output_format=bookdown::html_document2(), "
-        "   intermediates_dir='{root_dir}', "
         "   knit_root_dir='{root_dir}', "
         "   params = list({params}))\""
     ).format(
-        input_file=input_file,
-        output_file=output_file,
-        root_dir=root_dir,
+        input_file=os.path.abspath(input_file),
+        output_file=os.path.abspath(output_file),
+        root_dir=os.path.abspath(root_dir),
         params=param_str
     )
 

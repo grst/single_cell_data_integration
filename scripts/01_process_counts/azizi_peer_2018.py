@@ -33,6 +33,8 @@ var = pd.DataFrame().assign(gene_symbol = mat.columns).set_index("gene_symbol")
 adata = AnnData(mat.values, obs, var)
 adata = map_to_ensembl(adata)
 
+adata.obs["dataset"] = DATASET
+
 check_obs(adata)
 check_var(adata)
 

@@ -28,6 +28,8 @@ for i, sample in enumerate(samples):
 
 adata = concatenate(adatas, merge_var_cols=["gene_symbols"])
 
+adata.obs["dataset"] = DATASET
+
 check_obs(adata)
 check_var(adata)
 

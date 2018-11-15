@@ -55,6 +55,8 @@ idx = ~var.index.isnull()
 adata = AnnData(raw_counts.iloc[idx, 2:].values.transpose(), obs, var[idx])
 adata = map_to_ensembl(adata)
 
+adata.obs["dataset"] = DATASET
+
 check_obs(adata)
 check_var(adata)
 

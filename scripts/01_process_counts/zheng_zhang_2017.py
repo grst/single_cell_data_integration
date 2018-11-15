@@ -51,6 +51,8 @@ var = raw_counts[["geneID", "symbol"]].set_index("symbol")
 adata = AnnData(raw_counts.iloc[:, 2:].values.transpose(), obs, var)
 adata = map_to_ensembl(adata)
 
+adata.obs["dataset"] = DATASET
+
 check_obs(adata)
 check_var(adata)
 

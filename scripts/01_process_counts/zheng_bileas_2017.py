@@ -19,6 +19,8 @@ adata.obs = adata.obs.assign(sample = "1")\
                      .assign(platform = "10x_3p_v2")\
                      .assign(tumor_type = "PBMC")
 
+adata.obs["dataset"] = DATASET
+
 check_obs(adata)
 check_var(adata)
 

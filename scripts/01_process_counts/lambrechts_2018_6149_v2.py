@@ -49,6 +49,8 @@ for adata, sample in zip(adatas, dataset_samples):
 adata = concatenate(adatas, merge_var_cols=["gene_symbols"])
 adata.obs = adata.obs.join(obs.set_index("sample"), on="sample", how="left")
 
+adata.obs["dataset"] = DATASET
+
 check_obs(adata)
 check_var(adata)
 

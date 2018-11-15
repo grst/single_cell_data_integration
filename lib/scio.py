@@ -94,7 +94,7 @@ def check_obs(adata):
     """
     obs = adata.obs
     mandatory_cols = ["sample", "patient", "origin",
-            "replicate", "platform", "tumor_type"]
+            "replicate", "platform", "tumor_type", "dataset"]
     for col in mandatory_cols:
         assert col in obs.columns, "{} is a mandatory column".format(col)
         assert np.sum(obs[col].isnull()) == 0, "NAs in column {}".format(col)

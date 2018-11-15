@@ -11,6 +11,7 @@ Metadata needs to have consistent column names. Columns in **bold** are mandator
 * **replicate**, same patient and origin, but different biopsy
 * **platform**, experimental platform. controlled vocabs: `10x_3p`, `10x_3p_v2`, `smartseq2`, `indrop_v2`
 * **tumor_type**, tissue of origin. use TCGA cancer identifiers, such as `BRCA`.
+* **dataset**, the dataset identifier. Used later to visualize batches. 
 
 
 A consistencyt check for the columns and their contents is implemented in

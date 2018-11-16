@@ -176,7 +176,7 @@ if DOUBLET_DETECTION:
     print('Time elapsed: {:.2f} seconds, {:.2f}sec/iteration, for {} iterations'.format(end-start, (end-start) / clf.n_iters, clf.n_iters))
 ```
 
-```{python}
+```{python doubletdecon}
 if DOUBLET_DETECTION:
     adata.obs["doublets"] = np.array(["yes" if x else "no" for x in doublets])
     f = doubletdetection.plot.convergence(clf)
@@ -190,7 +190,7 @@ adata.raw = sc.pp.log1p(adata, copy=True)
 adata_raw = adata.copy()
 ```
 
-```{python}
+```{python normalize}
 sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
 sc.pp.log1p(adata)
 ```
@@ -224,7 +224,7 @@ cell_cycle_regev = cell_cycle_regev.join(biomart.set_index("HGNC symbol"), on=["
                         drop_duplicates()
 ```
 
-```{python}
+```{python cell-cycle-score}
 sc.tl.score_genes_cell_cycle(adata,
                              s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","Gene stable ID"].values,
                              g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","Gene stable ID"].values)
@@ -239,7 +239,7 @@ sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
 
 ## Visualizations
 
-```{python}
+```{python pca}
 sc.tl.pca(adata, svd_solver='arpack')
 ```
 
@@ -247,7 +247,7 @@ sc.tl.pca(adata, svd_solver='arpack')
 sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
 ```
 
-```{python}
+```{python umap}
 sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
 sc.tl.umap(adata)
 ```
@@ -259,7 +259,7 @@ sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample
 ## Remove confounders
 ### Cell cycle
 
-```{python}
+```{python regress-out-cell-cycle}
 sc.pp.regress_out(adata, ['S_score', 'G2M_score'])
 sc.pp.scale(adata)
 ```
@@ -297,7 +297,7 @@ for cell_type in cell_types:
     markers_in_adata = [m for m in markers if m in adata.var_names]
     print("{}: Ignored {}/{} genes because they are not in var_names".format(cell_type,
                     len(markers)-len(markers_in_adata), len(markers)))
-    adata.obs[cell_type] = np.log10(np.sum(adata.X[:,adata.var_names.isin(markers_in_adata)], axis=1)/len(markers_in_adata))
+    adata.obs[cell_type] = np.log1p(np.sum(adata.X[:,adata.var_names.isin(markers_in_adata)], axis=1)/len(markers_in_adata))
 
 scores = adata.obs[[ct for ct in cell_types if ct in adata.obs.columns]]
 adata.obs["cell_type"] = scores.idxmax(axis="columns")
@@ -314,7 +314,7 @@ sc.pl.umap(adata, color=[ct for ct in cell_types if ct in adata.obs.columns], nc
 
 ## Louvain clustering and silhouette score
 
-```{python}
+```{python louvain-clustering}
 sc.tl.louvain(adata)
 ```
 
@@ -327,7 +327,7 @@ skm.silhouette_score(adata.X, adata.obs["louvain"], sample_size=2000)
 ```
 
 ## save result
-```{python}
+```{python write-results}
 adata.write(OUTPUT_FILE, compression="lzf")
 adata.write_csvs(os.path.dirname(OUTPUT_FILE))
 ```

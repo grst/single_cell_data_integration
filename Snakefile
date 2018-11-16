@@ -27,4 +27,8 @@ DATASETS = pd.read_csv("tables/datasets.tsv", sep="\t", index_col=0).to_dict(ori
 
 include: "pipeline_stages/01_process_counts.smk"
 include: "pipeline_stages/02_filter_data.smk"
-include: "pipeline_stages/03_integrate_data.smk"
+include: "pipeline_stages/03_merge_data.smk"
+# include: "pipeline_stages/04_remove_batch_effects.smk"
+
+
+

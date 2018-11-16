@@ -65,13 +65,13 @@ adata = sc.read_h5ad(INPUT_FILE)
 ```
 
 ```{python}
-adata
+print(adata)
 ```
 
 ```{python}
 # very rough pre-filtering (for completely unfiltered datasets)
 sc.pp.filter_cells(adata, min_genes=10)
-adata.shape
+print(adata.shape)
 ```
 
 ```{python}
@@ -89,7 +89,7 @@ adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True, me
 ## Library size and number of detected genes.
 
 ```{python}
-adata.var_names.is_unique
+assert adata.var_names.is_unique
 ```
 
 ```{python}
@@ -112,14 +112,14 @@ sc.pl.scatter(adata, x='n_counts', y='n_genes', color='sample')
 ```
 
 ```{python}
-(ggplot(adata.obs, aes(x='rk_n_genes', y='n_genes', color='sample')) +
+print(ggplot(adata.obs, aes(x='rk_n_genes', y='n_genes', color='sample')) +
    geom_point() +
    geom_hline(yintercept=MIN_GENES) +
    geom_hline(yintercept=MAX_GENES))
 ```
 
 ```{python}
-(ggplot(adata.obs, aes(x='rk_percent_mito', y='percent_mito', color='sample')) +
+print(ggplot(adata.obs, aes(x='rk_percent_mito', y='percent_mito', color='sample')) +
    geom_point() +
    geom_hline(yintercept=MAX_MITO))
 ```
@@ -128,7 +128,7 @@ sc.pl.scatter(adata, x='n_counts', y='n_genes', color='sample')
 # Apply filtering by quality metrics
 
 ```{python}
-adata.shape
+print(adata.shape)
 ```
 
 ```{python}
@@ -183,166 +183,62 @@ if DOUBLET_DETECTION:
     f = doubletdetection.plot.convergence(clf)
 ```
 
-### Normalize while keeping the raw data
-
-```{python}
-sc.pp.filter_genes(adata, min_cells=1)
-adata.raw = sc.pp.log1p(adata, copy=True)
-adata_raw = adata.copy()
-```
+### Normalize (for visualization only, we will save the raw counts!)
 
 ```{python normalize}
-sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
-sc.pp.log1p(adata)
+# sc.pp.filter_genes(adata, min_cells=1)
+adata_vis = adata.copy()
+sc.pp.normalize_per_cell(adata_vis, counts_per_cell_after=1e4)
+sc.pp.log1p(adata_vis)
+sc.pp.filter_genes(adata_vis, min_cells=1)
 ```
 
 ### visualize doublets and remove them
 
 ```{python}
 if DOUBLET_DETECTION:
-    sc.tl.pca(adata, svd_solver='arpack')
-    sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
-    sc.tl.umap(adata)
-    sc.pl.umap(adata, color=["doublets"])
+    sc.tl.pca(adata_vis, svd_solver='arpack')
+    sc.pp.neighbors(adata_vis, n_neighbors=10, n_pcs=40)
+    sc.tl.umap(adata_vis)
+    sc.pl.umap(adata_vis, color=["doublets"])
 ```
 
 ```{python}
 if DOUBLET_DETECTION:
     print(adata.shape)
     adata = adata[adata.obs['doublets'] == "no", :]
-    sc.pp.filter_genes(adata, min_cells=1)
+    adata_vis = adata_vis[adata_vis.obs['doublets'] == "no", :]
     print(adata.shape)
-```
-
-# Detect Confounders
-
-
-## cell cycle
-
-```{python}
-cell_cycle_regev = pd.read_csv("tables/cell_cycle_regev.tsv", sep="\t")
-cell_cycle_regev = cell_cycle_regev.join(biomart.set_index("HGNC symbol"), on=["hgnc_symbol"], how="inner")\
-                        [["Gene stable ID", "phase"]].\
-                        drop_duplicates()
-```
-
-```{python cell-cycle-score}
-sc.tl.score_genes_cell_cycle(adata,
-                             s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","Gene stable ID"].values,
-                             g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","Gene stable ID"].values)
-```
-
-Use the 'alternative strategy' for cell cycle effect removal from the [seurat tutorial](https://satijalab.org/seurat/cell_cycle_vignette.html#assign-cell-cycle-scores). If we regress out all effects, we might loose valuable information about dividing/non-dividing exhausted/effective T cells. 
-
-```{python}
-adata.obs["cell_cycle_diff"] = adata.obs["S_score"] - adata.obs["G2M_score"]
-```
-
-```{python}
-cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
-adata_cc_genes = adata[:, cc_genes]
-sc.tl.pca(adata_cc_genes)
-sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
 ```
 
 ## visualize confounders
 
 ```{python pca}
-sc.tl.pca(adata, svd_solver='arpack')
-```
-
-```{python}
-sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
+sc.pp.filter_genes(adata_vis, min_cells=1)
+sc.tl.pca(adata_vis, svd_solver='arpack')
 ```
 
 ```{python umap}
-sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
-sc.tl.umap(adata)
+sc.pp.neighbors(adata_vis, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata_vis)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
-```
-
-# Remove confounders
-
-```{python}
-from matplotlib.pylab import hist
-```
-
-```{python regress-out-cell-cycle}
-sc.pp.regress_out(adata, ['cell_cycle_diff', "percent_mito", "n_counts", "n_genes"])
-# sc.pp.scale(adata, zero_center=True)
-```
-
-## Visualize confounders after removal
-
-```{python}
-cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
-adata_cc_genes = adata[:, cc_genes]
-sc.tl.pca(adata_cc_genes)
-sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
-```
-
-```{python}
-sc.tl.pca(adata, svd_solver='arpack')
-sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
-sc.tl.umap(adata)
-```
-
-```{python}
-sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
-```
-
-```{python}
-sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
-```
-
-# Cell type markers
-We use marker genes from MCP counter to preliminarly identify cell types in the dataset.
-The score is very basic, it's the mean sum of all marker genes.
-
-```{python}
-mcp_sig = pd.read_csv("tables/mcp_counter_signatures.txt", sep="\t")
-mcp_ensembl = mcp_sig.set_index("HUGO symbols").join(biomart.set_index("HGNC symbol"), how="inner")[["Cell population", "Gene stable ID"]]
-```
-
-```{python}
-cell_types = mcp_ensembl["Cell population"].unique()
-for cell_type in cell_types:
-    markers = mcp_ensembl.loc[mcp_ensembl["Cell population"] == cell_type, "Gene stable ID"].values
-    markers_in_adata = [m for m in markers if m in adata.var_names]
-    print("{}: Ignored {}/{} genes because they are not in var_names".format(cell_type,
-                    len(markers)-len(markers_in_adata), len(markers)))    
-    
-    adata.obs[cell_type] = np.sum(adata.X[:,adata.var_names.isin(markers_in_adata)], axis=1)/len(markers_in_adata)
-    
-scores = adata.obs[[ct for ct in cell_types if ct in adata.obs.columns]]
-scores = np.log1p(scores - np.min(scores.values))
-adata.obs["cell_type"] = scores.idxmax(axis="columns")
-
-```
-
-```{python}
-sc.pl.umap(adata, color=["cell_type"])
-```
-
-```{python}
-sc.pl.umap(adata, color=[ct for ct in cell_types if ct in adata.obs.columns], ncols=2)
+sc.pl.umap(adata_vis, color=["n_genes", "n_counts", "percent_mito", "sample", "patient", "origin"], ncols=2)
 ```
 
 # Louvain clustering and silhouette score
 
 ```{python louvain-clustering}
-sc.tl.louvain(adata)
+sc.tl.louvain(adata_vis)
 ```
 
 ```{python}
-sc.pl.umap(adata, color='louvain')
+sc.pl.umap(adata_vis, color='louvain')
 ```
 
 ```{python}
-skm.silhouette_score(adata.X, adata.obs["louvain"], sample_size=2000)
+print(skm.silhouette_score(adata_vis.X, adata_vis.obs["louvain"], sample_size=2000))
 ```
 
 # save result

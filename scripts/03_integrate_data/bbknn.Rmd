@@ -1,0 +1,57 @@
+---
+jupyter:
+  jupytext_format_version: '1.0'
+  kernelspec:
+    display_name: Python [conda env:single_cell_integration]
+    language: python
+    name: conda-env-single_cell_integration-py
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+---
+
+```{python}
+import bbknn
+import pandas as pd
+import scanpy.api as sc
+import os
+from pathlib import Path
+import numpy as np
+from toolz.functoolz import reduce
+import gc
+from scio import concatenate
+from jupytertools import setwd
+```
+
+```{python}
+OUT_FILE = r.params['output_file']
+```
+
+```{python}
+setwd()
+```
+
+```{python}
+datasets = pd.read_csv("tables/datasets.tsv", sep="\t")["id"].values
+```
+
+```{python}
+path_filtered = "results/data_filtered/{}/adata.h5ad"
+```
+
+```{python}
+adatas = [sc.read_h5ad(path_filtered.format(dataset)) for dataset in datasets]
+```
+
+```{python}
+for adata, dataset in zip(adatas, datasets): 
+    adata.obs["dataset"] = dataset
+    adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
+```

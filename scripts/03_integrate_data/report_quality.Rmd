@@ -1,0 +1,71 @@
+---
+jupyter:
+  jupytext_format_version: '1.0'
+  kernelspec:
+    display_name: Python [conda env:single_cell_integration]
+    language: python
+    name: conda-env-single_cell_integration-py
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+---
+
+```{python}
+import scanorama
+import pandas as pd
+import scanpy.api as sc
+import os
+from pathlib import Path
+import numpy as np
+from toolz.functoolz import reduce
+import gc
+from scio import concatenate
+from jupytertools import setwd
+```
+
+```{python}
+setwd()
+```
+
+```{python}
+adata=adata_merged
+```
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
+```
+
+```{python}
+sc.pl.pca(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
+```
+
+```{python}
+sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
+```
+
+```{python}
+mcp_sig = pd.read_csv("tables/mcp_counter_signatures.txt", sep="\t")
+cell_types = np.unique(mcp_sig["Cell population"].values)
+```
+
+```{python}
+sc.pl.umap(adata, color=[ct for ct in cell_types if ct in adata.obs.columns], ncols=2)
+```
+
+```{python}
+sc.pl.umap(adata, color="cell_type")
+```
+
+```{python}
+# use kbet! 
+adata_merged
+```

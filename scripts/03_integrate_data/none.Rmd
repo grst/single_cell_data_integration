@@ -1,0 +1,89 @@
+---
+jupyter:
+  jupytext_format_version: '1.0'
+  kernelspec:
+    display_name: Python [conda env:single_cell_integration]
+    language: python
+    name: conda-env-single_cell_integration-py
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+---
+
+```{python}
+from scio import concatenate
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from jupytertools import setwd
+setwd()
+```
+
+# Merge all datasets
+Naively merge all datasets into a single adata object. 
+This serves as a baseline for batch effect removal tools and is used to determine higly variable genes. 
+
+
+
+```{python}
+DATASET_FILE = "tables/datasets.tsv"
+ADATA_PATH = "results/data_filtered/{}/adata.h5ad"
+OUT_FILE = "results/data_integrated/none/adata.h5ad"
+```
+
+```{python}
+datasets = pd.read_csv(DATASET_FILE, sep="\t")["id"].values
+adatas = [sc.read_h5ad(ADATA_PATH.format(dataset)) for dataset in datasets]
+```
+
+```{python}
+for adata, dataset in zip(adatas, datasets):
+    adata.obs["dataset"] = dataset
+    adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
+```
+
+**use outer join here.**
+
+Rationale: some datasets have been filtered to contain only T cells. Therefore, genes that are specific for an other cell type (e.g. NK cells) may not have been detected. If we do an inner join, we would loose these genes in the downstream analysis. 
+
+
+## Detect highly variable genes. 
+Most batch effect removal tools rely on the fact that data has been
+filtered for highly variable genes. We do this filtering here, on the merged data only, 
+for the same reason we use the outer join above: 
+
+In the datasets that only contain T cells, lineage specific markers (e.g. CD8A) would 
+not be selected as highly variable and therefore discarded. 
+
+```{python}
+filter_result = sc.pp.highly_variable_genes(adata_merged, flavor="cell_ranger")
+highly_variable_genes(filter_result)
+```
+
+## Compute PCA and neighborhood
+-> same computational time in the downstream analysis. 
+
+Another reason to do this here: 
+BBKNN does not change values of the matrix, in merely replaces the neighborhood graph 
+of the adata object. Therefore, the downstream analysis must rely 
+on the input object already containing a neighborhood graph. 
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+```
+
+## save output files
+
+```{python}
+adata_merged.save(OUT_FILE)
+adata_merged.save_csvs(os.basename(OUT_FILE))
+```
+

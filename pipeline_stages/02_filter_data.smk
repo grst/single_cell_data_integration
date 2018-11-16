@@ -25,7 +25,7 @@ rule _filter_data:
     mem_mb=48000
   run:
     param_dict = DATASETS[wildcards.dataset]
-    param_dict["doublet_detection"] = False
+    param_dict["doublet_detection"] = True
     param_dict["input_file"] = input.adata
     param_dict["output_file"] = output.adata
     render_rmarkdown(input.script, output.report, ROOT, param_dict)

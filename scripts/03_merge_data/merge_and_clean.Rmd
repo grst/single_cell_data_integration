@@ -23,7 +23,14 @@ import pandas as pd
 import scanpy.api as sc
 import numpy as np
 from jupytertools import setwd
+from matplotlib import pyplot as plt
+import gc
+import os
 setwd()
+```
+
+```{python}
+biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
 ```
 
 # Merge all datasets
@@ -34,8 +41,8 @@ This serves as a baseline for batch effect removal tools and is used to determin
 
 ```{python}
 DATASET_FILE = "tables/datasets.tsv"
-ADATA_PATH = "results/data_filtered/{}/adata.h5ad"
-OUT_FILE = "results/data_integrated/none/adata.h5ad"
+ADATA_PATH = "/storage/scratch/data_filtered/{}/adata.h5ad"
+OUT_FILE = "results/data_merged/adata.h5ad"
 ```
 
 ```{python}
@@ -49,265 +56,56 @@ for adata, dataset in zip(adatas, datasets):
     adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
 ```
 
-**use outer join here.**
+### use outer join here.
 
 Rationale: some datasets have been filtered to contain only T cells. Therefore, genes that are specific for an other cell type (e.g. NK cells) may not have been detected. If we do an inner join, we would loose these genes in the downstream analysis. 
 
-
-## Detect highly variable genes. 
-Most batch effect removal tools rely on the fact that data has been
-filtered for highly variable genes. We do this filtering here, on the merged data only, 
-for the same reason we use the outer join above: 
-
-In the datasets that only contain T cells, lineage specific markers (e.g. CD8A) would 
-not be selected as highly variable and therefore discarded. 
-
 ```{python}
-filter_result = sc.pp.highly_variable_genes(adata_merged, flavor="cell_ranger")
-highly_variable_genes(filter_result)
+adata = concatenate(adatas, join="outer")
+del adatas
+gc.collect()
 ```
 
-## Compute PCA and neighborhood
--> same computational time in the downstream analysis. 
+### Data check
+* the merged object should be zero inflated (still the original, unnormalized counts) 
+* there should not be NA, outer join on sparse matrix introduces zeros
 
-Another reason to do this here: 
-BBKNN does not change values of the matrix, in merely replaces the neighborhood graph 
-of the adata object. Therefore, the downstream analysis must rely 
-on the input object already containing a neighborhood graph. 
+https://anndata.readthedocs.io/en/latest/anndata.AnnData.concatenate.html
 
 ```{python}
-sc.tl.pca(adata, svd_solver='arpack')
-sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
-```
-
-## save output files
-
-```{python}
-adata_merged.save(OUT_FILE)
-adata_merged.save_csvs(os.basename(OUT_FILE))
-```
-
-################################# this is from filter_data
----
-params:
-  input_file: NULL
-  output_file: NULL
-  max_genes: NULL
-  min_genes: NULL
-  max_frac_mito: NULL
-  doublet_detection: NULL
-jupyter:
-  jupytext_format_version: '1.0'
-  kernelspec:
-    display_name: Python [conda env:single_cell_integration]
-    language: python
-    name: conda-env-single_cell_integration-py
-  language_info:
-    codemirror_mode:
-      name: ipython
-      version: 3
-    file_extension: .py
-    mimetype: text/x-python
-    name: python
-    nbconvert_exporter: python
-    pygments_lexer: ipython3
-    version: 3.6.6
----
-
-```{python}
-# %load_ext autoreload
-# %autoreload 2
-
-import numpy as np
-import scanpy.api as sc
-import pandas as pd
-from plotnine import *
-from pylab import subplots
-import os.path
-import sys
-sys.path.append("../lib")
-from jupytertools import *
-import sklearn.metrics as skm
-setwd()
+mat_size = np.product(adata.X.shape)
+not_zero = np.sum(adata.X != 0)
+mat_na = np.sum(np.isnan(adata.X.data))
+print("{:>16,} \t matrix size".format(mat_size))
+print("{:>16,} \t zero".format(mat_size - not_zero))
+print("{:>16,} \t not zero".format(not_zero))
+print("{:>16,} \t NA".format(mat_na))
 ```
 
 ```{python}
-mito_genes = pd.read_csv("tables/mitochondrial_genes.tsv", sep="\t")["Gene stable ID"].values
-biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
-ribo_genes = pd.read_csv("tables/ribosomal_genes.tsv", sep="\t", comment="#")["Gene stable ID"].values
-```
-
-```{python}
-# MAX_GENES = 6000
-# MIN_GENES = 500
-# MAX_MITO = 0.15
-# DOUBLET_DETECTION = True
-MAX_GENES = r.params['max_genes']
-MIN_GENES = r.params['min_genes']
-MAX_MITO = r.params['max_frac_mito']
-DOUBLET_DETECTION = r.params['doublet_detection']
-INPUT_FILE = r.params['input_file']
-OUTPUT_FILE = r.params['output_file']
-```
-
-```{python}
-adata = sc.read_h5ad(INPUT_FILE)
-```
-
-```{python}
-adata
-```
-
-```{python}
-# very rough pre-filtering (for completely unfiltered datasets)
-sc.pp.filter_cells(adata, min_genes=10)
-adata.shape
-```
-
-```{python}
-tmp_mito = [g for g in mito_genes if g in adata.var_names]
-adata.obs['percent_mito'] = np.sum(
-    adata[:, tmp_mito].X, axis=1) / np.sum(adata.X, axis=1)
-# add the total counts per cell as observations-annotation to adata
-adata.obs['n_counts'] = adata.X.sum(axis=1)
-adata.obs['n_genes'] = (adata.X != 0).sum(axis=1)
-adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False, method="dense")
-adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True, method="dense")
-```
-
-# Quality Metrics
-## Library size and number of detected genes.
-
-```{python}
-adata.var_names.is_unique
+assert adata.var_names.is_unique
 ```
 
 ```{python}
 sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
              jitter=0.4, multi_panel=True)
-
 ```
 
-## Top 20 genes
+## Normalize and scale
 
 ```{python}
-sc.pl.highest_expr_genes(adata, n_top=20, show=False, annot_col="gene_symbols")
-```
-
-## Ratio of counts to number of mitochondrial genes
-
-```{python}
-sc.pl.scatter(adata, x='n_counts', y='percent_mito', color='sample')
-sc.pl.scatter(adata, x='n_counts', y='n_genes', color='sample')
-```
-
-```{python}
-(ggplot(adata.obs, aes(x='rk_n_genes', y='n_genes', color='sample')) +
-   geom_point() +
-   geom_hline(yintercept=MIN_GENES) +
-   geom_hline(yintercept=MAX_GENES))
-```
-
-```{python}
-(ggplot(adata.obs, aes(x='rk_percent_mito', y='percent_mito', color='sample')) +
-   geom_point() +
-   geom_hline(yintercept=MAX_MITO))
-```
-
-
-# Apply filtering by quality metrics
-
-```{python}
-adata.shape
-```
-
-```{python}
-sc.pp.filter_cells(adata, min_genes=MIN_GENES)
-print(adata.shape[0])
-```
-
-```{python}
-sc.pp.filter_cells(adata, max_genes=MAX_GENES)
-print(adata.shape[0])
-```
-
-```{python}
-adata = adata[adata.obs['percent_mito'] < MAX_MITO, :]
-print(adata.shape[0])
-```
-
-```{python}
-sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
-             jitter=0.4, multi_panel=True)
-
-```
-
-```{python}
-# exclude ribosomal and mitochondrial genes
-adata = adata[:, ~adata.var_names.isin(np.append(mito_genes, ribo_genes))]
-print(adata.shape)
-```
-
-```{python}
-sc.pl.scatter(adata, x='n_counts', y='percent_mito', color='sample')
-sc.pl.scatter(adata, x='n_counts', y='n_genes', color='sample')
-```
-
-
-# Doublet detection
-
-```{python}
-if DOUBLET_DETECTION:
-    import doubletdetection
-    import time
-    clf = doubletdetection.BoostClassifier(n_iters=30)
-    start = time.time()
-    doublets = clf.fit(adata.X).predict(p_thresh=1e-7, voter_thresh=0.8)
-    end = time.time()
-    print('Time elapsed: {:.2f} seconds, {:.2f}sec/iteration, for {} iterations'.format(end-start, (end-start) / clf.n_iters, clf.n_iters))
-```
-
-```{python doubletdecon}
-if DOUBLET_DETECTION:
-    adata.obs["doublets"] = np.array(["yes" if x else "no" for x in doublets])
-    f = doubletdetection.plot.convergence(clf)
-```
-
-### Normalize while keeping the raw data
-
-```{python}
-sc.pp.filter_genes(adata, min_cells=1)
 adata.raw = sc.pp.log1p(adata, copy=True)
-adata_raw = adata.copy()
-```
-
-```{python normalize}
+sc.pp.filter_genes(adata, min_cells=1)
 sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
 sc.pp.log1p(adata)
 ```
 
-### visualize doublets and remove them
-
 ```{python}
-if DOUBLET_DETECTION:
-    sc.tl.pca(adata, svd_solver='arpack')
-    sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
-    sc.tl.umap(adata)
-    sc.pl.umap(adata, color=["doublets"])
+# to speed up dev: subsample
+# sc.pp.subsample(adata, n_obs=5000)
 ```
 
-```{python}
-if DOUBLET_DETECTION:
-    print(adata.shape)
-    adata = adata[adata.obs['doublets'] == "no", :]
-    sc.pp.filter_genes(adata, min_cells=1)
-    print(adata.shape)
-```
-
-# Detect Confounders
-
-
-## cell cycle
+## Determine cell cycle score (on full dataset)
 
 ```{python}
 cell_cycle_regev = pd.read_csv("tables/cell_cycle_regev.tsv", sep="\t")
@@ -316,7 +114,7 @@ cell_cycle_regev = cell_cycle_regev.join(biomart.set_index("HGNC symbol"), on=["
                         drop_duplicates()
 ```
 
-```{python cell-cycle-score}
+```{python}
 sc.tl.score_genes_cell_cycle(adata,
                              s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","Gene stable ID"].values,
                              g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","Gene stable ID"].values)
@@ -335,34 +133,50 @@ sc.tl.pca(adata_cc_genes)
 sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
 ```
 
-## visualize confounders
+## Detect highly variable genes. 
+Most batch effect removal tools rely on the fact that data has been
+filtered for highly variable genes. We do this filtering here, on the merged data only, 
+for the same reason we use the outer join above: 
+
+In the datasets that only contain T cells, lineage specific markers (e.g. CD8A) would 
+not be selected as highly variable and therefore discarded. 
+
+```{python}
+filter_result = sc.pp.filter_genes_dispersion(adata.X, flavor="seurat", min_mean=0.0125, max_mean=3, min_disp=0.5)
+```
+
+```{python}
+sc.pl.filter_genes_dispersion(filter_result, log=False)
+```
+
+```{python}
+adata = adata[:, filter_result.gene_subset]
+```
+
+# visualize confounders
 
 ```{python pca}
 sc.tl.pca(adata, svd_solver='arpack')
 ```
 
 ```{python}
-sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
+sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
 ```
 
-```{python umap}
+```{python}
 sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
 sc.tl.umap(adata)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
 ```
 
 # Remove confounders
 
-```{python}
-from matplotlib.pylab import hist
-```
-
 ```{python regress-out-cell-cycle}
 sc.pp.regress_out(adata, ['cell_cycle_diff', "percent_mito", "n_counts", "n_genes"])
-# sc.pp.scale(adata, zero_center=True)
+sc.pp.scale(adata, zero_center=True)
 ```
 
 ## Visualize confounders after removal
@@ -381,62 +195,19 @@ sc.tl.umap(adata)
 ```
 
 ```{python}
-sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
+sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "sample", "patient", "origin"], ncols=2)
-```
-
-# Cell type markers
-We use marker genes from MCP counter to preliminarly identify cell types in the dataset.
-The score is very basic, it's the mean sum of all marker genes.
-
-```{python}
-mcp_sig = pd.read_csv("tables/mcp_counter_signatures.txt", sep="\t")
-mcp_ensembl = mcp_sig.set_index("HUGO symbols").join(biomart.set_index("HGNC symbol"), how="inner")[["Cell population", "Gene stable ID"]]
-```
-
-```{python}
-cell_types = mcp_ensembl["Cell population"].unique()
-for cell_type in cell_types:
-    markers = mcp_ensembl.loc[mcp_ensembl["Cell population"] == cell_type, "Gene stable ID"].values
-    markers_in_adata = [m for m in markers if m in adata.var_names]
-    print("{}: Ignored {}/{} genes because they are not in var_names".format(cell_type,
-                    len(markers)-len(markers_in_adata), len(markers)))    
-    
-    adata.obs[cell_type] = np.sum(adata.X[:,adata.var_names.isin(markers_in_adata)], axis=1)/len(markers_in_adata)
-    
-scores = adata.obs[[ct for ct in cell_types if ct in adata.obs.columns]]
-scores = np.log1p(scores - np.min(scores.values))
-adata.obs["cell_type"] = scores.idxmax(axis="columns")
-
-```
-
-```{python}
-sc.pl.umap(adata, color=["cell_type"])
-```
-
-```{python}
-sc.pl.umap(adata, color=[ct for ct in cell_types if ct in adata.obs.columns], ncols=2)
-```
-
-# Louvain clustering and silhouette score
-
-```{python louvain-clustering}
-sc.tl.louvain(adata)
-```
-
-```{python}
-sc.pl.umap(adata, color='louvain')
-```
-
-```{python}
-skm.silhouette_score(adata.X, adata.obs["louvain"], sample_size=2000)
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
 ```
 
 # save result
 ```{python write-results}
-adata.write(OUTPUT_FILE, compression="lzf")
-adata.write_csvs(os.path.dirname(OUTPUT_FILE))
+adata.write(OUT_FILE, compression="lzf")
+adata.write_csvs(os.path.dirname(OUT_FILE))
+```
+
+```{python}
+
 ```

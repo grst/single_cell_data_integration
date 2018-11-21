@@ -1,3 +1,15 @@
+"""
+MERGE DATA PIPELINE STAGE
+
+In this stage, we will merge the datasets into
+a single adata object.
+
+Moreover, we will try to reduce the effect of confounders
+and normalize the data. All these preprocessing steps
+are required for successful application
+of batch effect removal tools.
+"""
+
 rule merge_data:
   """
   merge all data and regress out confounders.

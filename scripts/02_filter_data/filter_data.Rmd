@@ -32,7 +32,6 @@ jupyter:
 import numpy as np
 import scanpy.api as sc
 import pandas as pd
-from plotnine import *
 from pylab import subplots
 import os.path
 import sys

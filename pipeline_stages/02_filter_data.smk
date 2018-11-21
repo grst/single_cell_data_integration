@@ -1,3 +1,16 @@
+"""
+Data filtering pipeline stage.
+
+Filter every dataset individually before merging based on QC criteria.
+These include
+* minimum and maximum number of detected genes
+* fraction of mitochondrial reads
+* doublet detection.
+
+In this pipeline stage, the data *as kept as raw counts*
+with *no normalization* as this is required for successful merging.
+"""
+
 rule filter_data:
   """
   run the cleaning/filtering script on all dataset
@@ -16,10 +29,10 @@ rule _filter_data:
   input:
     adata=path.join(DATA_PATH, "{dataset}/adata.h5ad"),
     script="scripts/02_filter_data/filter_data.Rmd"
-  # conda TODO
   output:
     adata=path.join(DATA_PATH_FILTERED, "{dataset}/adata.h5ad"),
     report=path.join(DATA_PATH_FILTERED, "{dataset}/report.html")
+  conda: "../envs/filter_data.yml"
   threads: 8
   resources:
     mem_mb=48000

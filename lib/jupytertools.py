@@ -3,7 +3,6 @@ Collection of helper functions
 that are convenient in jupyter
 notebooks
 """
-from IPython.display import display as ipy_display
 import pandas as pd
 import os
 
@@ -16,6 +15,7 @@ def display(obj, n=PD_DEFAULT_ROWS, ncol=10, *args, **kwargs):
     extension of the display function, allows to
     specify the number of rows/cols for pandas.
     """
+    from IPython.display import display as ipy_display
     with pd.option_context('display.max_rows', n, 'display.max_columns', ncol):
         ipy_display(obj)
 

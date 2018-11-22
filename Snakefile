@@ -14,7 +14,6 @@ The datasets and their identifiers are defined in `tables/datasets.tsv`
 
 import pandas as pd
 import os.path as path
-from lib.snakemaketools import render_rmarkdown
 
 ROOT = path.abspath(path.dirname(workflow.snakefile))
 

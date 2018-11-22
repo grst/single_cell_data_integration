@@ -1,9 +1,17 @@
 """
-Module containing helper functions to build Snakemake rules
+Snakemake wrapper to build rmarkdown reports with
+bookdown and custom parameters.
 """
+
+__author__    = "Gregor Sturm"
+__copyright__ = "Copyright 2018, Gregor Sturm"
+__email__     = "g.sturm@tum.de"
+__license__   = "MIT"
+
 
 from snakemake import shell
 import os
+from os import path
 
 
 def _literal_to_r_str(value):
@@ -57,3 +65,7 @@ def render_rmarkdown(input_file, output_file, root_dir, params=None):
     )
 
     shell(cmd)
+
+
+render_rmarkdown(snakemake.input.script, snakemake.output.report,
+        snakemake.params.root_dir, snakemake.params.rmd_params)

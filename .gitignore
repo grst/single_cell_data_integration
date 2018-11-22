@@ -1,5 +1,6 @@
 data
 .snakemake
+.snakemake*
 logs
 reports
 summary

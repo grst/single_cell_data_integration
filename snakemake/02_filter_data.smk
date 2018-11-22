@@ -29,7 +29,6 @@ rule _filter_data:
   input:
     adata=path.join(DATA_PATH, "{dataset}/adata.h5ad"),
     script="pipeline_stages/02_filter_data/filter_data.Rmd"
-  # conda TODO
   output:
     adata=path.join(DATA_PATH_FILTERED, "{dataset}/adata.h5ad"),
     report=path.join(DATA_PATH_FILTERED, "{dataset}/report.html")
@@ -37,9 +36,11 @@ rule _filter_data:
   threads: 8
   resources:
     mem_mb=48000
-  run:
-    param_dict = DATASETS[wildcards.dataset]
-    param_dict["doublet_detection"] = True
-    param_dict["input_file"] = input.adata
-    param_dict["output_file"] = output.adata
-    render_rmarkdown(input.script, output.report, ROOT, param_dict)
+  params:
+    root_dir=ROOT,
+    rmd_params=lambda wildcards: dict(DATASETS[wildcards.dataset],
+        input_file=path.join(DATA_PATH, "{}/adata.h5ad".format(wildcards.dataset)),
+        output_file=path.join(DATA_PATH_FILTERED, "{}/adata.h5ad".format(wildcards.dataset)),
+        doublet_detection=True)
+  wrapper:
+    "file:snakemake/wrappers/render_rmarkdown"

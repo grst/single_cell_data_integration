@@ -35,10 +35,10 @@ import pandas as pd
 from pylab import subplots
 import os.path
 import sys
-sys.path.append("../lib")
-from jupytertools import *
 from matplotlib import pyplot as plt
 import sklearn.metrics as skm
+sys.path.append("lib")
+from jupytertools import *
 setwd()
 ```
 
@@ -102,7 +102,7 @@ sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
 ## Top 20 genes
 
 ```{python}
-sc.pl.highest_expr_genes(adata, n_top=20, show=True, annot_col="gene_symbols")
+sc.pl.highest_expr_genes(adata, n_top=20, show=True, gene_symbols="gene_symbols")
 ```
 
 ## Ratio of counts to number of mitochondrial genes

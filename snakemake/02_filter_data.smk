@@ -15,7 +15,7 @@ rule _filter_data:
   """
   input:
     adata=path.join(DATA_PATH, "{dataset}/adata.h5ad"),
-    script="scripts/02_filter_data/filter_data.Rmd"
+    script="pipeline_stages/02_filter_data/filter_data.Rmd"
   # conda TODO
   output:
     adata=path.join(DATA_PATH_FILTERED, "{dataset}/adata.h5ad"),

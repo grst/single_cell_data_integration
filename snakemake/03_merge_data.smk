@@ -24,7 +24,7 @@ rule _merge_data:
   """
   input:
     expand("results/data_processed/{dataset}/adata.h5ad", dataset=DATASETS),
-    script="scripts/03_merge_data/merge_and_clean.Rmd"
+    script="pipeline_stages/03_merge_data/merge_and_clean.Rmd"
   output:
     adata="results/data_merged/adata.h5ad",
     report="results/data_merged/report.html"

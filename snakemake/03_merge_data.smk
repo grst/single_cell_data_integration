@@ -1,3 +1,15 @@
+"""
+MERGE DATA PIPELINE STAGE
+
+In this stage, we will merge the datasets into
+a single adata object.
+
+Moreover, we will try to reduce the effect of confounders
+and normalize the data. All these preprocessing steps
+are required for successful application
+of batch effect removal tools.
+"""
+
 rule merge_data:
   """
   merge all data and regress out confounders.
@@ -12,7 +24,7 @@ rule _merge_data:
   """
   input:
     expand("results/data_processed/{dataset}/adata.h5ad", dataset=DATASETS),
-    script="scripts/03_merge_data/merge_and_clean.Rmd"
+    script="pipeline_stages/03_merge_data/merge_and_clean.Rmd"
   output:
     adata="results/data_merged/adata.h5ad",
     report="results/data_merged/report.html"

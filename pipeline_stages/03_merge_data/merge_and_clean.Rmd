@@ -1,0 +1,213 @@
+---
+jupyter:
+  jupytext_format_version: '1.0'
+  kernelspec:
+    display_name: Python [conda env:single_cell_integration]
+    language: python
+    name: conda-env-single_cell_integration-py
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+---
+
+```{python}
+from scio import concatenate
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from jupytertools import setwd
+from matplotlib import pyplot as plt
+import gc
+import os
+setwd()
+```
+
+```{python}
+biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
+```
+
+# Merge all datasets
+Naively merge all datasets into a single adata object. 
+This serves as a baseline for batch effect removal tools and is used to determine higly variable genes. 
+
+
+
+```{python}
+DATASET_FILE = "tables/datasets.tsv"
+ADATA_PATH = "/storage/scratch/data_filtered/{}/adata.h5ad"
+OUT_FILE = "results/data_merged/adata.h5ad"
+```
+
+```{python}
+datasets = pd.read_csv(DATASET_FILE, sep="\t")["id"].values
+adatas = [sc.read_h5ad(ADATA_PATH.format(dataset)) for dataset in datasets]
+```
+
+```{python}
+for adata, dataset in zip(adatas, datasets):
+    adata.obs["dataset"] = dataset
+    adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
+```
+
+### use outer join here.
+
+Rationale: some datasets have been filtered to contain only T cells. Therefore, genes that are specific for an other cell type (e.g. NK cells) may not have been detected. If we do an inner join, we would loose these genes in the downstream analysis. 
+
+```{python}
+adata = concatenate(adatas, join="outer")
+del adatas
+gc.collect()
+```
+
+### Data check
+* the merged object should be zero inflated (still the original, unnormalized counts) 
+* there should not be NA, outer join on sparse matrix introduces zeros
+
+https://anndata.readthedocs.io/en/latest/anndata.AnnData.concatenate.html
+
+```{python}
+mat_size = np.product(adata.X.shape)
+not_zero = np.sum(adata.X != 0)
+mat_na = np.sum(np.isnan(adata.X.data))
+print("{:>16,} \t matrix size".format(mat_size))
+print("{:>16,} \t zero".format(mat_size - not_zero))
+print("{:>16,} \t not zero".format(not_zero))
+print("{:>16,} \t NA".format(mat_na))
+```
+
+```{python}
+assert adata.var_names.is_unique
+```
+
+```{python}
+sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
+             jitter=0.4, multi_panel=True)
+```
+
+## Normalize and scale
+
+```{python}
+adata.raw = sc.pp.log1p(adata, copy=True)
+sc.pp.filter_genes(adata, min_cells=1)
+sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
+sc.pp.log1p(adata)
+```
+
+```{python}
+# to speed up dev: subsample
+# sc.pp.subsample(adata, n_obs=5000)
+```
+
+## Determine cell cycle score (on full dataset)
+
+```{python}
+cell_cycle_regev = pd.read_csv("tables/cell_cycle_regev.tsv", sep="\t")
+cell_cycle_regev = cell_cycle_regev.join(biomart.set_index("HGNC symbol"), on=["hgnc_symbol"], how="inner")\
+                        [["Gene stable ID", "phase"]].\
+                        drop_duplicates()
+```
+
+```{python}
+sc.tl.score_genes_cell_cycle(adata,
+                             s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","Gene stable ID"].values,
+                             g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","Gene stable ID"].values)
+```
+
+Use the 'alternative strategy' for cell cycle effect removal from the [seurat tutorial](https://satijalab.org/seurat/cell_cycle_vignette.html#assign-cell-cycle-scores). If we regress out all effects, we might loose valuable information about dividing/non-dividing exhausted/effective T cells. 
+
+```{python}
+adata.obs["cell_cycle_diff"] = adata.obs["S_score"] - adata.obs["G2M_score"]
+```
+
+```{python}
+cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
+adata_cc_genes = adata[:, cc_genes]
+sc.tl.pca(adata_cc_genes)
+sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
+```
+
+## Detect highly variable genes. 
+Most batch effect removal tools rely on the fact that data has been
+filtered for highly variable genes. We do this filtering here, on the merged data only, 
+for the same reason we use the outer join above: 
+
+In the datasets that only contain T cells, lineage specific markers (e.g. CD8A) would 
+not be selected as highly variable and therefore discarded. 
+
+```{python}
+filter_result = sc.pp.filter_genes_dispersion(adata.X, flavor="seurat", min_mean=0.0125, max_mean=3, min_disp=0.5)
+```
+
+```{python}
+sc.pl.filter_genes_dispersion(filter_result, log=False)
+```
+
+```{python}
+adata = adata[:, filter_result.gene_subset]
+```
+
+# visualize confounders
+
+```{python pca}
+sc.tl.pca(adata, svd_solver='arpack')
+```
+
+```{python}
+sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
+```
+
+```{python}
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
+```
+
+```{python}
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
+```
+
+# Remove confounders
+
+```{python regress-out-cell-cycle}
+sc.pp.regress_out(adata, ['cell_cycle_diff', "percent_mito", "n_counts", "n_genes"])
+sc.pp.scale(adata, zero_center=True)
+```
+
+## Visualize confounders after removal
+
+```{python}
+cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
+adata_cc_genes = adata[:, cc_genes]
+sc.tl.pca(adata_cc_genes)
+sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
+```
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
+```
+
+```{python}
+sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
+```
+
+```{python}
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
+```
+
+# save result
+```{python write-results}
+adata.write(OUT_FILE, compression="lzf")
+adata.write_csvs(os.path.dirname(OUT_FILE))
+```
+
+```{python}
+
+```

@@ -9,7 +9,7 @@ At this stage, we will
 
 
 For each dataset, a preprocess script named [UNIQUE_IDENTIFIER].py
-needs to be placed in `scripts/01_process_counts/`
+needs to be placed in `pipeline_stages/01_process_counts/`
 """
 
 rule process_counts:
@@ -26,7 +26,7 @@ rule _process_counts:
     apply process_counts on a dataset.
     """
     input:
-        "scripts/01_process_counts/{dataset}.py"
+        "pipeline_stages/01_process_counts/{dataset}.py"
     conda:
         "../envs/process_counts.yml"
     output:

@@ -44,68 +44,70 @@ ensg_hk = np.unique(
 ```
 
 ```{python}
-OUT_FILE = r.params['output_file']
+adata = sc.read("results/data_merged/adata.h5ad")
 ```
 
 ```{python}
-datasets = pd.read_csv("tables/datasets.tsv", sep="\t")["id"].values
+adata_raw = sc.AnnData(adata.raw.X, obs=adata.obs, var=adata.raw.var)
 ```
 
 ```{python}
-path_filtered = "results/data_filtered/{}/adata.h5ad"
+sc.pp.filter_genes(adata_raw, min_cells=1)
 ```
 
 ```{python}
-adatas = [sc.read_h5ad(path_filtered.format(dataset)) for dataset in datasets]
+sc.pp.scale(adata_raw)
 ```
 
 ```{python}
-for adata, dataset in zip(adatas, datasets): 
-    adata.obs["dataset"] = dataset
-    adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
+ensg_hk_fil = adata_raw.var_names[adata_raw.var_names.isin(ensg_hk)]
 ```
 
 ```{python}
-adata_merged = concatenate(adatas, join="inner")
-del adatas
-gc.collect()
+adata.uns["hk_mean"] = np.mean(adata_raw[:, ensg_hk_fil].X).copy()
 ```
 
 ```{python}
-ensg_hk_fil = adata_merged.var_names[adata_merged.var_names.isin(ensg_hk)]
+adata.obs["hk_score"] = np.mean(adata_raw[:, ensg_hk_fil].X, axis=1).copy()
 ```
 
 ```{python}
-adata_merged.uns["hk_mean"] = np.mean(adata_merged[:, ensg_hk_fil].X).copy()
+adata.obs["hk_scaling_factor"] = adata.uns["hk_mean"]/adata.obs["hk_score"]
 ```
 
 ```{python}
-adata_merged.obs["hk_score"] = np.mean(adata_merged[:, ensg_hk_fil].X, axis=1).copy()
+tmp_x = adata.X * adata.obs["hk_scaling_factor"][:, np.newaxis]
 ```
 
 ```{python}
-adata_merged.obs["hk_scaling_factor"] = adata_merged.uns["hk_mean"]/adata_merged.obs["hk_score"]
+assert tmp_x.shape == adata.X.shape
 ```
 
 ```{python}
-tmp_x = adata_merged.X * adata_merged.obs["hk_scaling_factor"][:, np.newaxis]
+adata.X = tmp_x
 ```
 
 ```{python}
-assert tmp_x.shape == adata_merged.X.shape
+sc.pp.scale(adata)
 ```
 
 ```{python}
-adata_merged.X = tmp_x
+# adata_merged.write(OUT_FILE)
+# adata_merged.write_csvs(os.basename(OUT_FILE))
 ```
 
 ```{python}
-sc.pp.scale
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
 ```
 
 ```{python}
-adata_merged.write(OUT_FILE)
-adata_merged.write_csvs(os.basename(OUT_FILE))
+sc.pl.pca(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
+```
+
+```{python}
+sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
 ```
 
 ```{python}

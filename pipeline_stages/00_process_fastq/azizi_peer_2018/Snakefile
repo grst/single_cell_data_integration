@@ -1,14 +1,29 @@
-SRA_ACCESSIONS = [l.split()[0].strip() for l in open("SRR_Acc_List.txt").readlines()]
-OUT_DIR = "/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/azizi_peer_2018/fastq"
+import pandas as pd
 
-rule fastq:
-  """run download"""
-  input:
-    expand(OUT_DIR + "/{accession}_pass_1.fastq.gz", accession=SRA_ACCESSIONS),
-    expand(OUT_DIR + "/{accession}_pass_2.fastq.gz", accession=SRA_ACCESSIONS)
+SAMPLE_SHEET = pd.read_csv("SraRunTable.txt", sep="\t")
+SRA_ACCESSIONS = SAMPLE_SHEET["Run"].values
+GSM_ACCESSIONS = SAMPLE_SHEET["Sample_Name"].values
 
+OUT_DIR = "/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/azizi_peer_2018"
+
+def get_sra_files(wildcards):
+    return expand(OUT_DIR + "/fastq_download/{accession}_pass_{read}.fastq.gz",
+              accession=SRA_ACCESSIONS[GSM_ACCESSIONS == wildcards.accession],
+              read="{read}")
 
 rule download_fastq:
+  """run download"""
+  input:
+    expand(OUT_DIR + "/fastq_download/{accession}_pass_1.fastq.gz", accession=SRA_ACCESSIONS),
+    expand(OUT_DIR + "/fastq_download/{accession}_pass_2.fastq.gz", accession=SRA_ACCESSIONS)
+
+rule merge_fastq:
+  """merge multiple fastq files of the same sample into one"""
+  input:
+    expand(OUT_DIR + "/fastq/{accession}_{read}.fastq.gz", accession=GSM_ACCESSIONS, read=["R1", "R2"]),
+
+
+rule _download_fastq:
   """download fastq"""
   output:
     OUT_DIR + "/{accession}_pass_1.fastq.gz",
@@ -21,3 +36,13 @@ rule download_fastq:
     "fastq-dump --outdir " + OUT_DIR + " "
     "--gzip --skip-technical --readids "
     "--read-filter pass --dumpbase --split-files --clip {params.accession}"
+
+rule _merge_fastq:
+  output:
+    OUT_DIR + "/fastq/{accession}_R{read}.fastq.gz",
+  input:
+    get_sra_files
+  shell:
+    "cat {input:q} > {output:q}"
+
+

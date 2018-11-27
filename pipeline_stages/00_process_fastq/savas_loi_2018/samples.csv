@@ -1,2 +1,4 @@
-samples,expected_cells,read_length,batch,patient,origin,replicate,platform,tumor_type
-
+"samples","expected_cells","read_length","batch","patient","origin","replicate","platform","tumor_type","dataset"
+"Tils20_1",10000,101,1,1,"tumor_primary",1,"10x_3p_v2","BRCA","savas_loi_2018"
+"Tils20_2",10000,101,1,1,"tumor_primary",2,"10x_3p_v2","BRCA","savas_loi_2018"
+"Tils32",10000,101,1,2,"tumor_primary",1,"10x_3p_v2","BRCA","savas_loi_2018"

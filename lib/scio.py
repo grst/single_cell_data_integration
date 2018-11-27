@@ -7,7 +7,7 @@ MANDATORY_COLS = ["samples", "patient", "origin", "replicate",
 
 VALID_ORIGIN = ["tumor_primary", "normal_adjacent", "tumor_edge", "blood_peripheral", "lymph_node"]
 
-VALID_PLATFORM = ["10x_3p", "10x_3p_v2", "10x_5p", "indrop_v2", "smartseq2"]
+VALID_PLATFORM = ["10x_3p_v1", "10x_3p_v2", "10x_5p", "indrop_v2", "smartseq2"]
 
 VALID_TUMOR_TYPE = ["LAML", "ACC", "BLCA", "LGG", "BRCA",
         "CESC", "CHOL", "LCML", "COAD", "CNTL",

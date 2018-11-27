@@ -116,7 +116,7 @@ def _check_obs(obs):
         assert np.sum(obs[col].isnull()) == 0, "NAs in column {}".format(col)
 
     # check sample columns
-    sample_count = obs.groupby(["patient", "origin", "replicate"])['sample'].nunique()
+    sample_count = obs.groupby(["patient", "origin", "replicate"])['samples'].nunique()
 
     assert np.all(sample_count == 1), \
             "sample must be unique for each patient, origin and replicate"
@@ -143,7 +143,6 @@ def check_samples_csv(path):
 
     samples_csv_mandatory_cols = ["samples", "expected_cells", "read_length", "batch"]
 
-    print(samples.columns.values[:4])
     assert np.all(samples.columns.values[:4] == samples_csv_mandatory_cols), \
         "First 4 columns of samples.csv must comply with dropSeqPipe specifications"
 

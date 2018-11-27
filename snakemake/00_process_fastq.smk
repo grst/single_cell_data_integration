@@ -10,5 +10,5 @@ rule check_samples_csv:
         check_samples_csv("pipeline_stages/00_process_fastq/{}/samples.csv".format(ds))
       except AssertionError as e:
         print(e)
-      print("\n\n")
+      print("\n")
 

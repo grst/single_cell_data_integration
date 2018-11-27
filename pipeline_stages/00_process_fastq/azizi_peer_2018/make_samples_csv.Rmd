@@ -68,22 +68,26 @@ samples = run_table[["Sample_Name", "source_name", "resident_tissue"]]\
                 .drop_duplicates()\
                 .rename({"Sample_Name": "samples", "source_name": "patient", "resident_tissue": "origin"}, axis="columns")\
                 .assign(batch=1)\
-                .assign(replicate=1)\
                 .assign(platform="indrop_v2")\
                 .assign(tumor_type="BRCA")\
                 .assign(origin = lambda x : x["origin"].map(lambda k : map_origin[k]))\
                 .assign(expected_cells=10000)\
                 .assign(dataset="azizi_peer_2018")\
                 .assign(read_length=101)\
-                [["samples", "expected_cells", "read_length", "batch", "patient", "origin", "replicate", "platform", "tumor_type"]]
+                [["samples", "expected_cells", "read_length", "batch", "patient", "origin", "platform", "tumor_type", "dataset"]]
 ```
 
 ```{python}
-samples
+g = samples.groupby(["patient", "origin"])
+samples["replicate"] = g.cumcount() + 1
 ```
 
 ```{python}
-samples.to_csv("./samples.csv")
+display(samples, n=100)
+```
+
+```{python}
+samples.to_csv("./samples.csv", index=None)
 ```
 
 ```{python}

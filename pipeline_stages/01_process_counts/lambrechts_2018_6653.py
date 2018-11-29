@@ -7,7 +7,7 @@ sys.path.append("lib")
 from scio import concatenate, check_obs, check_var
 
 DATASET = "lambrechts_2018_6653"
-OBS_DATA = "raw/{}/samples.csv".format(DATASET)
+OBS_DATA = "pipeline_stages/00_process_fastq/{}/samples.csv".format(DATASET)
 OUTPUT_DIR = "results/data_processed/{}/".format(DATASET)
 
 obs = pd.read_csv(OBS_DATA).drop("batch", axis="columns")
@@ -36,7 +36,7 @@ obs = obs.assign(origin = obs["origin"].apply(lambda x: origin_map[x]))\
 dataset_samples = obs["sample"].values
 
 
-filenames = ["raw/{}/data/cellranger/{}/outs/raw_gene_bc_matrices_h5.h5".format(DATASET, sample)
+filenames = ["data/{}/{}/raw_gene_bc_matrices_h5.h5".format(DATASET, sample)
              for sample in dataset_samples]
 
 adatas = [sc.read_10x_h5(filename, genome="GRCh38") for filename in filenames]

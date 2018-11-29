@@ -18,40 +18,39 @@ jupyter:
 ---
 
 ```{python}
-import bbknn
+# %load_ext autoreload
+# %autoreload 2
+from scio import concatenate
 import pandas as pd
 import scanpy.api as sc
-import os
-from pathlib import Path
 import numpy as np
-from toolz.functoolz import reduce
-import gc
-from scio import concatenate
 from jupytertools import setwd
-```
-
-```{python}
-OUT_FILE = r.params['output_file']
-```
-
-```{python}
+import gc
 setwd()
 ```
 
 ```{python}
-datasets = pd.read_csv("tables/datasets.tsv", sep="\t")["id"].values
+INPUT_FILE = r.params['input_file']
+OUT_FILE = r.params['output_file']
 ```
 
 ```{python}
-path_filtered = "results/data_filtered/{}/adata.h5ad"
+adata = sc.read(INPUT_FILE)
 ```
 
 ```{python}
-adatas = [sc.read_h5ad(path_filtered.format(dataset)) for dataset in datasets]
+sc.pl.pca_variance_ratio(adata, log=True, n_pcs=50)
 ```
 
 ```{python}
-for adata, dataset in zip(adatas, datasets): 
-    adata.obs["dataset"] = dataset
-    adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
+sc.pp.neighbors
+```
+
+```{python}
+sc.pp.bbknn(adata, batch_key='dataset', approx=True, 
+            neighbors_within_batch=3)
+```
+
+```{python}
+
 ```

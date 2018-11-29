@@ -1,4 +1,7 @@
 ---
+params:
+  input_file: NULL
+  output_file: NULL
 jupyter:
   jupytext_format_version: '1.0'
   kernelspec:
@@ -20,44 +23,57 @@ jupyter:
 ```{python}
 # %load_ext autoreload
 # %autoreload 2
-from scio import concatenate
 import pandas as pd
 import scanpy.api as sc
 import numpy as np
+import sys
+sys.path.append("lib")
 from jupytertools import setwd
+from scio import concatenate
+import os.path
 import gc
-```
-
-```{python}
 setwd()
 ```
 
 ```{python}
+INPUT_FILE = r.params['input_file']
+OUT_FILE = r.params['output_file']
+```
+
+# Apply batch effect removal as in Schelker et al (2017)
+This approach normalizes the expression of all cells to the expression of housekeeping genes.
+Briefly outlined
+* compute a scaling factor for each sample using the raw data
+
+$$\frac{\text{mean of housekeeping genes of sample } i}{\text{mean of housekeeping genes across all samples}}$$
+
+
+* apply the scaling factor to the scaled/normalized data
+
+## Load files
+
+```{python}
+# Load housekeeping genes
 hk_genes = pd.read_csv("tables/housekeeping_genes.txt", comment="#", sep="\t")
 hk_genes.columns = ["gene_symbol", "NM"]
 biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
-```
 
-```{python}
+# map them to ENSG
 ensg_hk = np.unique(
     biomart.join(hk_genes.set_index("gene_symbol"), on="HGNC symbol", how="inner")["Gene stable ID"].values)
 ```
 
 ```{python}
-adata = sc.read("results/data_merged/adata.h5ad")
+adata = sc.read(INPUT_FILE)
 ```
 
 ```{python}
 adata_raw = sc.AnnData(adata.raw.X, obs=adata.obs, var=adata.raw.var)
-```
-
-```{python}
 sc.pp.filter_genes(adata_raw, min_cells=1)
-```
-
-```{python}
 sc.pp.scale(adata_raw)
 ```
+
+## Compute HK score
 
 ```{python}
 ensg_hk_fil = adata_raw.var_names[adata_raw.var_names.isin(ensg_hk)]
@@ -74,6 +90,8 @@ adata.obs["hk_score"] = np.mean(adata_raw[:, ensg_hk_fil].X, axis=1).copy()
 ```{python}
 adata.obs["hk_scaling_factor"] = adata.uns["hk_mean"]/adata.obs["hk_score"]
 ```
+
+## Apply HK score
 
 ```{python}
 tmp_x = adata.X * adata.obs["hk_scaling_factor"][:, np.newaxis]
@@ -92,24 +110,15 @@ sc.pp.scale(adata)
 ```
 
 ```{python}
-# adata_merged.write(OUT_FILE)
-# adata_merged.write_csvs(os.basename(OUT_FILE))
-```
-
-```{python}
+# Important! Do this on each batch-correct output file as the next step depends on it!
 sc.tl.pca(adata, svd_solver='arpack')
 sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
 sc.tl.umap(adata)
 ```
 
-```{python}
-sc.pl.pca(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
-```
+## Save results
 
 ```{python}
-sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
-```
-
-```{python}
-
+adata.write(OUT_FILE)
+adata.write_csvs(os.path.basename(OUT_FILE))
 ```

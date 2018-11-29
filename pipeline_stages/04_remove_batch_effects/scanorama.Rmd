@@ -18,52 +18,24 @@ jupyter:
 ---
 
 ```{python}
-import scanorama
+# %load_ext autoreload
+# %autoreload 2
 import pandas as pd
 import scanpy.api as sc
-import os
-from pathlib import Path
 import numpy as np
-from toolz.functoolz import reduce
-import gc
-from scio import concatenate
+import sys
+sys.path.append("lib")
 from jupytertools import setwd
-```
-
-```{python}
-OUT_FILE = r.params['output_file']
-```
-
-```{python}
+from scio import concatenate
+import scanorama
+import os.path
+import gc
 setwd()
 ```
 
 ```{python}
-datasets = pd.read_csv("tables/datasets.tsv", sep="\t")["id"].values
-```
-
-```{python}
-path_filtered = "results/data_filtered/{}/adata.h5ad"
-```
-
-```{python}
-adatas = [sc.read_h5ad(path_filtered.format(dataset)) for dataset in datasets]
-```
-
-```{python}
-for adata, dataset in zip(adatas, datasets): 
-    adata.obs["dataset"] = dataset
-    adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
-```
-
-```{python}
-gene_ids = reduce(np.intersect1d, [adata.var_names for adata in adatas])
-```
-
-```{python}
-# filter to common genes. Copy to turn view into a real data. Overwrite the old stuff to free up memory
-adatas = [adata[:, gene_ids].copy() for adata in adatas]
-gc.collect()
+INPUT_FILE = r.params['input_file']
+OUT_FILE = r.params['output_file']
 ```
 
 ```{python}

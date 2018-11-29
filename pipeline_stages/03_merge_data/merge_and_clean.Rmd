@@ -172,7 +172,7 @@ sc.tl.umap(adata)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin"], ncols=2)
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "dataset", "patient", "origin", "platform"], ncols=2)
 ```
 
 # Remove confounders

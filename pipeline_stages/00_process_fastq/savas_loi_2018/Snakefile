@@ -1,0 +1,15 @@
+PATH = "/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/savas_loi_2018"
+with open('samples.csv') as f:
+  SAMPLES =  [l.split(',')[0] for l in f.readlines()][1:]
+
+
+rule rename_fastq:
+    input:
+      expand(PATH + "/fastq/{sample}_{read}.fastq.gz", sample=SAMPLES, read=["R1", "R2"])
+
+rule _rename_fastq:
+    output:
+      PATH + "/fastq/{sample}_{read}.fastq.gz"
+    shell:
+      "ln -s " + PATH + "/fastq_download/{wildcards.sample}*{wildcards.read}*.fastq.gz {output}"
+

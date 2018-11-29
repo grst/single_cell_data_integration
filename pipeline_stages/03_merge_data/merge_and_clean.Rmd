@@ -1,4 +1,7 @@
 ---
+params:
+  input_files: NULL
+  output_file: NULL
 jupyter:
   jupytext_format_version: '1.0'
   kernelspec:
@@ -18,14 +21,16 @@ jupyter:
 ---
 
 ```{python}
-from scio import concatenate
 import pandas as pd
 import scanpy.api as sc
 import numpy as np
-from jupytertools import setwd
 from matplotlib import pyplot as plt
-import gc
 import os
+import sys
+import gc
+sys.path.append("lib")
+from jupytertools import setwd
+from scio import concatenate
 setwd()
 ```
 
@@ -34,40 +39,38 @@ biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
 ```
 
 # Merge all datasets
-Naively merge all datasets into a single adata object. 
-This serves as a baseline for batch effect removal tools and is used to determine higly variable genes. 
+Naively merge all datasets into a single adata object.
+This serves as a baseline for batch effect removal tools and is used to determine higly variable genes.
 
 
 
 ```{python}
-DATASET_FILE = "tables/datasets.tsv"
-ADATA_PATH = "/storage/scratch/data_filtered/{}/adata.h5ad"
-OUT_FILE = "results/data_merged/adata.h5ad"
+# OUT_FILE = "results/data_merged/adata.h5ad"
+OUT_FILE = r.params["output_file"]
+INPUT_FILES = r.params["input_files"].split(",")
+```
+
+```{python load_adata, message=FALSE}
+adatas = [sc.read_h5ad(in_file) for in_file in INPUT_FILES]
 ```
 
 ```{python}
-datasets = pd.read_csv(DATASET_FILE, sep="\t")["id"].values
-adatas = [sc.read_h5ad(ADATA_PATH.format(dataset)) for dataset in datasets]
-```
-
-```{python}
-for adata, dataset in zip(adatas, datasets):
-    adata.obs["dataset"] = dataset
+for adata in adatas:
     adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
 ```
 
 ### use outer join here.
 
-Rationale: some datasets have been filtered to contain only T cells. Therefore, genes that are specific for an other cell type (e.g. NK cells) may not have been detected. If we do an inner join, we would loose these genes in the downstream analysis. 
+Rationale: some datasets have been filtered to contain only T cells. Therefore, genes that are specific for an other cell type (e.g. NK cells) may not have been detected. If we do an inner join, we would loose these genes in the downstream analysis.
 
-```{python}
+```{python merge_adata, warning=FALSE}
 adata = concatenate(adatas, join="outer")
 del adatas
 gc.collect()
 ```
 
 ### Data check
-* the merged object should be zero inflated (still the original, unnormalized counts) 
+* the merged object should be zero inflated (still the original, unnormalized counts)
 * there should not be NA, outer join on sparse matrix introduces zeros
 
 https://anndata.readthedocs.io/en/latest/anndata.AnnData.concatenate.html
@@ -120,7 +123,7 @@ sc.tl.score_genes_cell_cycle(adata,
                              g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","Gene stable ID"].values)
 ```
 
-Use the 'alternative strategy' for cell cycle effect removal from the [seurat tutorial](https://satijalab.org/seurat/cell_cycle_vignette.html#assign-cell-cycle-scores). If we regress out all effects, we might loose valuable information about dividing/non-dividing exhausted/effective T cells. 
+Use the 'alternative strategy' for cell cycle effect removal from the [seurat tutorial](https://satijalab.org/seurat/cell_cycle_vignette.html#assign-cell-cycle-scores). If we regress out all effects, we might loose valuable information about dividing/non-dividing exhausted/effective T cells.
 
 ```{python}
 adata.obs["cell_cycle_diff"] = adata.obs["S_score"] - adata.obs["G2M_score"]
@@ -133,13 +136,13 @@ sc.tl.pca(adata_cc_genes)
 sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
 ```
 
-## Detect highly variable genes. 
+## Detect highly variable genes.
 Most batch effect removal tools rely on the fact that data has been
-filtered for highly variable genes. We do this filtering here, on the merged data only, 
-for the same reason we use the outer join above: 
+filtered for highly variable genes. We do this filtering here, on the merged data only,
+for the same reason we use the outer join above:
 
-In the datasets that only contain T cells, lineage specific markers (e.g. CD8A) would 
-not be selected as highly variable and therefore discarded. 
+In the datasets that only contain T cells, lineage specific markers (e.g. CD8A) would
+not be selected as highly variable and therefore discarded.
 
 ```{python}
 filter_result = sc.pp.filter_genes_dispersion(adata.X, flavor="seurat", min_mean=0.0125, max_mean=3, min_disp=0.5)

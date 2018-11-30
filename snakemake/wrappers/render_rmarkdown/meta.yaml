@@ -1,0 +1,14 @@
+name: render_papermill
+description: |
+  Render a jupyter notebook (or jupytext-compatible text format)
+  to html using papermill. The notebook may contain
+  parameters (as supported by papermill). Use the
+  `nb_params` dictionary to pass parameters to the notebook.
+authors:
+  - grst
+input:
+  - `input.notebook` path to notebook to render
+  - `params.root_dir` path in which to execute the notebook
+  - `params.nb_params` dictionary that will be passed to papermill as notbook parameters
+output:
+  - `output.report` path to html output file.

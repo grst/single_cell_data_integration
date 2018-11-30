@@ -1,0 +1,12 @@
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - pandas =0.23.4
+  - matplotlib =3.0.2
+  - r-base =3.5.1
+  - r-rmarkdown =1.10
+  - r-reticulate =1.10
+  - r-bookdown =0.7
+

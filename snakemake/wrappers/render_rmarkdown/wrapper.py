@@ -52,7 +52,7 @@ def render_rmarkdown(input_file, output_file, root_dir, params=None):
 
     cmd = (
         "MKL_THREADING_LAYER=GNU "  # was necessary to circumvent incompatibilities of Intel mkl with libgomp.
-        "Rscript -e \"rmarkdown::render('{input_file}', "
+        "Rscript --vanilla -e \"rmarkdown::render('{input_file}', "
         "   output_file='{output_file}', "
         "   output_format=bookdown::html_document2(), "
         "   knit_root_dir='{root_dir}', "
@@ -67,5 +67,5 @@ def render_rmarkdown(input_file, output_file, root_dir, params=None):
     shell(cmd)
 
 
-render_rmarkdown(snakemake.input.script, snakemake.output.report,
-        snakemake.params.root_dir, snakemake.params.rmd_params)
+render_rmarkdown(snakemake.input.notebook, snakemake.output.report,
+        snakemake.params.root_dir, snakemake.params.nb_params)

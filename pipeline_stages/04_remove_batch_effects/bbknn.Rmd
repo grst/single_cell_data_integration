@@ -15,16 +15,22 @@ jupyter:
     nbconvert_exporter: python
     pygments_lexer: ipython3
     version: 3.6.6
+params:
+  input_file: NULL
+  output_file: NULL
 ---
 
 ```{python}
 # %load_ext autoreload
 # %autoreload 2
-from scio import concatenate
 import pandas as pd
 import scanpy.api as sc
 import numpy as np
+import sys
+sys.path.append("lib")
 from jupytertools import setwd
+from scio import concatenate
+import os.path
 import gc
 setwd()
 ```
@@ -39,18 +45,31 @@ adata = sc.read(INPUT_FILE)
 ```
 
 ```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+```
+
+```{python}
 sc.pl.pca_variance_ratio(adata, log=True, n_pcs=50)
 ```
 
 ```{python}
-sc.pp.neighbors
+# adata.obs["batch"] = [dataset + "_" + patient for dataset, patient in zip(adata.obs["dataset"], adata.obs["patient"])]
+```
+
+```{python bbknn}
+sc.pp.bbknn(adata, batch_key='dataset', approx=True,
+            neighbors_within_batch=3, n_pcs=50)
+```
+
+```{python umap}
+sc.tl.umap(adata)
 ```
 
 ```{python}
-sc.pp.bbknn(adata, batch_key='dataset', approx=True, 
-            neighbors_within_batch=3)
+# sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
 ```
 
 ```{python}
-
+adata.write(OUT_FILE)
+adata.write_csvs(os.path.basename(OUT_FILE))
 ```

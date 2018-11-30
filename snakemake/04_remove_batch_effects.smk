@@ -1,4 +1,4 @@
-INTEGRATION_TOOLS = ["schelker"]
+INTEGRATION_TOOLS = ["schelker", "scanorama", "bbknn", "harmony"]
 
 rule remove_batch_effects:
   """
@@ -24,7 +24,7 @@ rule _integrate_batch_effect_removal:
   resources:
     mem_mb=128000
   conda:
-    "../envs/remove_batch_effects.yml"
+    "../envs/{tool}.yml"
   params:
     root_dir=ROOT,
     rmd_params = lambda wildcards: dict(

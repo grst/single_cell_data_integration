@@ -20,13 +20,7 @@ jupyter:
     nbconvert_exporter: python
     pygments_lexer: ipython3
     version: 3.6.6
-params: 
-  input_file: results/data_merged/adata.h5ad
-  output_file: /storage/scratch/harmony.h5ad
 ---
-
-
-
 
 ```{python}
 # %load_ext autoreload
@@ -40,7 +34,14 @@ from jupytertools import setwd
 from scio import concatenate
 import os.path
 import gc
+import rpy2
+import rpy2.robjects.numpy2ri
+rpy2.robjects.numpy2ri.activate()
 setwd()
+```
+
+```{python}
+# %load_ext rpy2.ipython
 ```
 
 ```{r}
@@ -49,10 +50,8 @@ library(magrittr)
 ```
 
 ```{python}
-# work around reticulate not maintaining the python path
-setwd()
-INPUT_FILE = os.path.abspath(r.params['input_file'])
-OUT_FILE = os.path.abspath(r.params['output_file'])
+INPUT_FILE = r.params['input_file']
+OUT_FILE = r.params['output_file'] 
 ```
 
 ```{python}
@@ -69,26 +68,31 @@ pca_mat = np.matrix(adata.obsm["X_pca"])
 ```
 
 ```{r magic_args='-i pca_mat -i batch_vector -o harmony_embeddings'}
-harmony_embeddings = HarmonyMatrix(py$pca_mat[1:20000,], py$batch_vector[1:20000])
+harmony_embeddings <- HarmonyMatrix(pca_mat, batch_vector)
 ```
 
 ```{python}
-adata = adata[:20000,:].copy()
+#sdata = seurat data
+# %%R
+sdata = Convert(py$adata, to = "seurat")
+```
+
+```{r}
+sdata %<>% RunPCA(pcs.compute = 20)
 ```
 
 ```{python}
-adata.obsm["X_harmony"] = r.harmony_embeddings
+# run harmony
+options(repr.plot.height = 3, repr.plot.width = 6)
+system.time(pbmc %<>% RunHarmony("stim", theta = 2, plot_convergence = TRUE, nclust = 50, max.iter.cluster = 100))
+```
+
+```{r}
+# convert back to python
+adata2 = Convert(from = sdata, to = "anndata")
 ```
 
 ```{python}
-sc.pp.neighbors(adata, n_neighbors=10, use_rep="X_harmony")
-sc.tl.umap(adata)
-```
-
-```{python}
-sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
-```
-```{pytyon}
-adata.save(OUT_FILE)
-adata.save_csvs(os.basename(OUT_FILE))
+sc.pp.neighbors(adata_corrected, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata_corrected)
 ```

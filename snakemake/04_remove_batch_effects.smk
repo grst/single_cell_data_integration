@@ -16,7 +16,7 @@ rule _integrate_batch_effect_removal:
   """
   input:
     "results/data_merged/adata.h5ad",
-    script="pipeline_stages/04_remove_batch_effects/{tool}.Rmd"
+    notebook="pipeline_stages/04_remove_batch_effects/{tool}.Rmd"
   output:
     adata="results/data_integrated/{tool}/adata.h5ad",
     report="results/data_integrated/{tool}/report.html"
@@ -27,7 +27,7 @@ rule _integrate_batch_effect_removal:
     "../envs/{tool}.yml"
   params:
     root_dir=ROOT,
-    rmd_params = lambda wildcards: dict(
+    nb_params = lambda wildcards: dict(
       output_file="results/data_integrated/{}/adata.h5ad".format(wildcards.tool),
       input_file="results/data_merged/adata.h5ad"
     )
@@ -41,7 +41,7 @@ rule _remove_batch_effects_report:
   """
   input:
     adata="results/data_integrated/{tool}/adata.h5ad",
-    script="pipeline_stages/04_remove_batch_effects/visualize.Rmd"
+    notebook="pipeline_stages/04_remove_batch_effects/visualize.Rmd"
   output:
     report="results/data_integrated/{tool}/quality.html"
   threads: 8
@@ -51,7 +51,7 @@ rule _remove_batch_effects_report:
     "../envs/remove_batch_effects.yml"
   params:
     root_dir=ROOT,
-    rmd_params = lambda wildcards: dict(
+    nb_params = lambda wildcards: dict(
       input_file="results/data_integrated/{}/adata.h5ad".format(wildcards.tool)
     )
   wrapper:

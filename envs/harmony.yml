@@ -12,4 +12,7 @@ dependencies:
   - r-reticulate =1.10
   - r-bookdown =0.7
   - r-harmony =0_89f1226
+  - r-tibble =1.4.2
+  - r-dplyr =0.7.6
+  - r-tidyr =0.8.1
 

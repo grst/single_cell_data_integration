@@ -3,11 +3,16 @@ params:
   input_file: NULL
   output_file: NULL
 jupyter:
-  jupytext_format_version: '1.0'
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
   kernelspec:
-    display_name: Python [conda env:single_cell_integration]
+    display_name: Python 3
     language: python
-    name: conda-env-single_cell_integration-py
+    name: python3
   language_info:
     codemirror_mode:
       name: ipython
@@ -67,8 +72,14 @@ ensg_hk = np.unique(
 adata = sc.read(INPUT_FILE)
 ```
 
+Following the procedure by Schelker, we need log-transformed TPM to start with. 
+We need to 
+ * undo the log transformation of `adata.raw`
+ * normalize (will give us something like tpm)
+ * redo the log-transformation. 
+
 ```{python}
-adata_raw = sc.AnnData(adata.raw.X, obs=adata.obs, var=adata.raw.var)
+adata_raw = sc.AnnData((np.e ** adata.raw.X.todense()) -1, obs=adata.obs, var=adata.raw.var)
 sc.pp.filter_genes(adata_raw, min_cells=1)
 sc.pp.scale(adata_raw)
 ```

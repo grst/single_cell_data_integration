@@ -20,7 +20,7 @@ jupyter:
     nbconvert_exporter: python
     pygments_lexer: ipython3
     version: 3.6.6
-params: 
+params:
   input_file: results/data_merged/adata.h5ad
   output_file: /storage/scratch/harmony.h5ad
 ---
@@ -46,6 +46,7 @@ setwd()
 ```{r}
 library(harmony)
 library(magrittr)
+library(reticulate)
 ```
 
 ```{python}
@@ -68,7 +69,7 @@ batch_vector = adata.obs["dataset"].values.tolist()
 pca_mat = np.matrix(adata.obsm["X_pca"])
 ```
 
-```{r magic_args='-i pca_mat -i batch_vector -o harmony_embeddings'}
+```{r run-harmony}
 harmony_embeddings = HarmonyMatrix(py$pca_mat[1:20000,], py$batch_vector[1:20000])
 ```
 
@@ -86,9 +87,6 @@ sc.tl.umap(adata)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
-```
-```{pytyon}
-adata.save(OUT_FILE)
-adata.save_csvs(os.basename(OUT_FILE))
+adata.write(OUT_FILE)
+adata.write_csvs(os.path.basename(OUT_FILE))
 ```

@@ -22,7 +22,7 @@ rule _merge_data:
   """
   input:
     expand("results/data_filtered/{dataset}/adata.h5ad", dataset=DATASETS),
-    notebook="pipeline_stages/03_merge_data/merge_and_clean.Rmd"
+    notebook="pipeline_stages/03_merge_data/merge.Rmd"
   output:
     adata="results/data_merged/adata.h5ad",
     report="results/data_merged/report.html"
@@ -35,7 +35,7 @@ rule _merge_data:
     root_dir=ROOT,
     nb_params={
       "output_file": "results/data_merged/adata.h5ad",
-      "input_files": ",".join(["results/data_processed/{}/adata.h5ad".format(d) for d in DATASETS])
+      "input_files": ",".join(["results/data_filtered/{}/adata.h5ad".format(d) for d in DATASETS])
     }
   wrapper:
     "file:snakemake/wrappers/render_rmarkdown"

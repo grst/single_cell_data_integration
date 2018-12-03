@@ -31,7 +31,7 @@ def _literal_to_r_str(value):
             return str(value)
 
 
-def render_rmarkdown(input_file, output_file, root_dir, params=None):
+def render_rmarkdown(input_file, output_file, root_dir, params=None, threads=1):
     """
     Snakemake wrapper function to render an Rmarkdown document the way I want it to.
 
@@ -52,12 +52,16 @@ def render_rmarkdown(input_file, output_file, root_dir, params=None):
 
     cmd = (
         "MKL_THREADING_LAYER=GNU "  # was necessary to circumvent incompatibilities of Intel mkl with libgomp.
+        "MKL_NUM_THREADS={threads} "
+        "NUMEXPR_NUM_THREADS={threads} "
+        "OMP_NUM_THREADS={threads} "
         "Rscript --vanilla -e \"rmarkdown::render('{input_file}', "
         "   output_file='{output_file}', "
         "   output_format=bookdown::html_document2(), "
         "   knit_root_dir='{root_dir}', "
         "   params = list({params}))\""
     ).format(
+        threads=threads,
         input_file=os.path.abspath(input_file),
         output_file=os.path.abspath(output_file),
         root_dir=os.path.abspath(root_dir),
@@ -68,4 +72,5 @@ def render_rmarkdown(input_file, output_file, root_dir, params=None):
 
 
 render_rmarkdown(snakemake.input.notebook, snakemake.output.report,
-        snakemake.params.root_dir, snakemake.params.nb_params)
+        snakemake.params.root_dir, params=snakemake.params.nb_params,
+        threads=snakemake.threads)

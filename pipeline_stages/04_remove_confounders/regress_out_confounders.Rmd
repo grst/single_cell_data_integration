@@ -1,13 +1,18 @@
 ---
 params:
-  input_files: NULL
+  input_file: NULL
   output_file: NULL
 jupyter:
-  jupytext_format_version: '1.0'
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
   kernelspec:
-    display_name: Python [conda env:single_cell_integration]
+    display_name: Python 3
     language: python
-    name: conda-env-single_cell_integration-py
+    name: python3
   language_info:
     codemirror_mode:
       name: ipython
@@ -38,74 +43,25 @@ setwd()
 biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
 ```
 
-# Merge all datasets
-Naively merge all datasets into a single adata object.
-This serves as a baseline for batch effect removal tools and is used to determine higly variable genes.
-
-
-
 ```{python}
 # OUT_FILE = "results/data_merged/adata.h5ad"
 OUT_FILE = r.params["output_file"]
-INPUT_FILES = r.params["input_files"].split(",")
+INPUT_FILE = r.params["input_file"]
 ```
 
 ```{python load_adata, message=FALSE}
-adatas = [sc.read_h5ad(in_file) for in_file in INPUT_FILES]
-```
-
-```{python}
-for adata in adatas:
-    adata.var.drop(["n_cells", "gene_symbols"], axis="columns", inplace=True, errors="ignore")
-```
-
-### use outer join here.
-
-Rationale: some datasets have been filtered to contain only T cells. Therefore, genes that are specific for an other cell type (e.g. NK cells) may not have been detected. If we do an inner join, we would loose these genes in the downstream analysis.
-
-```{python merge_adata, warning=FALSE}
-adata = concatenate(adatas, join="outer")
-del adatas
-gc.collect()
-```
-
-### Data check
-* the merged object should be zero inflated (still the original, unnormalized counts)
-* there should not be NA, outer join on sparse matrix introduces zeros
-
-https://anndata.readthedocs.io/en/latest/anndata.AnnData.concatenate.html
-
-```{python}
-mat_size = np.product(adata.X.shape)
-not_zero = np.sum(adata.X != 0)
-mat_na = np.sum(np.isnan(adata.X.data))
-print("{:>16,} \t matrix size".format(mat_size))
-print("{:>16,} \t zero".format(mat_size - not_zero))
-print("{:>16,} \t not zero".format(not_zero))
-print("{:>16,} \t NA".format(mat_na))
-```
-
-```{python}
-assert adata.var_names.is_unique
-```
-
-```{python}
-sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
-             jitter=0.4, multi_panel=True)
+adata = sc.read_h5ad(INPUT_FILE)
 ```
 
 ## Normalize and scale
 
+The `raw` data object will contain counts that are log-scaled, but not normalized. These valuese will be used later for visualization of marker genes.
+
 ```{python}
-adata.raw = sc.pp.log1p(adata, copy=True)
+adata.raw = adata.copy()
 sc.pp.filter_genes(adata, min_cells=1)
 sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
 sc.pp.log1p(adata)
-```
-
-```{python}
-# to speed up dev: subsample
-# sc.pp.subsample(adata, n_obs=5000)
 ```
 
 ## Determine cell cycle score (on full dataset)
@@ -211,6 +167,3 @@ adata.write(OUT_FILE, compression="lzf")
 adata.write_csvs(os.path.dirname(OUT_FILE))
 ```
 
-```{python}
-
-```

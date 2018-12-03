@@ -67,12 +67,24 @@ integrated, corrected = scanorama.correct_scanpy(adatas, return_dimred=True, bat
 adata_corrected = concatenate(corrected)
 ```
 
+```{python}
+adata_corrected.obsm["X_scanorama"] = np.vstack(integrated)
+```
+
+```{python}
+sc.pp.scale(adata_corrected)
+```
+
 ```{python pca}
 sc.tl.pca(adata_corrected, svd_solver='arpack')
 ```
 
+```{python}
+sc.pl.pca(adata_corrected, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
+```
+
 ```{python neighbors}
-sc.pp.neighbors(adata_corrected, n_neighbors=10, n_pcs=40)
+sc.pp.neighbors(adata_corrected, n_neighbors=10, use_rep="X_scanorama")
 ```
 
 ```{python umap}

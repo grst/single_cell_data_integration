@@ -54,6 +54,7 @@ sc.pl.pca_variance_ratio(adata, log=True, n_pcs=50)
 
 ```{python}
 # adata.obs["batch"] = [dataset + "_" + patient for dataset, patient in zip(adata.obs["dataset"], adata.obs["patient"])]
+pass
 ```
 
 ```{python bbknn}
@@ -63,10 +64,6 @@ sc.pp.bbknn(adata, batch_key='dataset', approx=True,
 
 ```{python umap}
 sc.tl.umap(adata)
-```
-
-```{python}
-# sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
 ```
 
 ```{python}

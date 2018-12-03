@@ -11,4 +11,6 @@ dependencies:
   - r-rmarkdown =1.10
   - r-reticulate =1.10
   - r-bookdown =0.7
+  - pip:
+      - bbknn
 

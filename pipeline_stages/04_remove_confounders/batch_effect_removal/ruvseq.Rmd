@@ -34,19 +34,17 @@ from jupytertools import setwd
 from scio import concatenate
 import os.path
 import gc
-import rpy2
-import rpy2.robjects.numpy2ri
-rpy2.robjects.numpy2ri.activate()
 setwd()
 ```
 
-```{python}
-# %load_ext rpy2.ipython
-```
+In the single cell tutorial at ECCB 2018, RuvSeq was used to remove "unwanted variation"
+https://ppapasaikas.github.io/ECCB2018_SC/#ruvseq. 
+
+RUVSeq takes per-cell-normalized, non-log-transformed counts as input. 
 
 ```{r}
-library(harmony)
-library(magrittr)
+library(RUVSeq)
+library(reticulate)
 ```
 
 ```{python}
@@ -59,40 +57,37 @@ adata = sc.read(INPUT_FILE)
 ```
 
 ```{python}
-sc.tl.pca(adata, svd_solver='arpack')
+# Load housekeeping genes
+hk_genes = pd.read_csv("tables/housekeeping_genes.txt", comment="#", sep="\t")
+hk_genes.columns = ["gene_symbol", "NM"]
+biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
+
+# map them to ENSG
+ensg_hk = np.unique(
+    biomart.join(hk_genes.set_index("gene_symbol"), on="HGNC symbol", how="inner")["Gene stable ID"].values)
 ```
 
 ```{python}
-batch_vector = adata.obs["dataset"].values.tolist()
-pca_mat = np.matrix(adata.obsm["X_pca"])
+ensg_hk_fil = adata.var_names[adata.var_names.isin(ensg_hk)]
+sc.pp.filter_genes(adata, min_cells=1)
+sc.pp.normalize_per_cell(adata, counts_per_cell_after=3000)
+counts_mat = adata.X.T.toarray()
+adata.X = None
+gc.collect()
 ```
 
-```{r magic_args='-i pca_mat -i batch_vector -o harmony_embeddings'}
-harmony_embeddings <- HarmonyMatrix(pca_mat, batch_vector)
+```{r transfer-data}
+counts_mat = py$counts_mat
 ```
 
-```{python}
-#sdata = seurat data
-# %%R
-sdata = Convert(py$adata, to = "seurat")
+```{python cleanup}
+del counts_mat
+gc.collect()
 ```
 
 ```{r}
-sdata %<>% RunPCA(pcs.compute = 20)
-```
-
-```{python}
-# run harmony
-options(repr.plot.height = 3, repr.plot.width = 6)
-system.time(pbmc %<>% RunHarmony("stim", theta = 2, plot_convergence = TRUE, nclust = 50, max.iter.cluster = 100))
-```
-
-```{r}
-# convert back to python
-adata2 = Convert(from = sdata, to = "anndata")
-```
-
-```{python}
-sc.pp.neighbors(adata_corrected, n_neighbors=10, n_pcs=40)
-sc.tl.umap(adata_corrected)
+# k = number of factors of unwanted variation. 
+# there are at least 2 (dataset + patient)
+# could also try more...
+counts_ruvg = RUVg(counts_mat, py$ensg_hk_fil, k=2)
 ```

@@ -3,6 +3,13 @@ basenames = [c.replace("read-I1_si-", "read-XXX_si-") for c in chunks]
 
 rule concat_files:
   input:
+    expand("/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq/{flowcell}_{lane}_{read}.fastq.gz",
+    flowcell=["flowcell1", "flowcell2", "flowcell3"],
+    lane=["lane-001", "lane-002", "lane-003", "lane-004"],
+    read=["R1", "R2"])
+
+rule merge_files:
+  input:
     expand("/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq_merged/{chunk}_{read}.fastq.gz", chunk=basenames, read=["R1", "R2"])
 
 
@@ -10,7 +17,7 @@ def _get_input_files(wildcards):
     chunk=wildcards.chunk
     return ["/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq_download/{}.fastq.gz".format(chunk.replace("XXX", ridx)) for ridx in ["I1", "RA"]]
 
-rule _concat_files:
+rule _merge_file:
   input:
     _get_input_files
   output:
@@ -20,3 +27,11 @@ rule _concat_files:
     "env.yml"
   shell:
     "python ./merge_zheng_bileas.py {input} {output}"
+
+rule _concat_files:
+  input:
+    expand("/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq_merged/{chunk}_{read}.fastq.gz", chunk=basenames, read=["R1", "R2"])
+  output:
+    "/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq/{flowcell}_{lane}_{read}.fastq.gz"
+  shell:
+    "cat /naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq_merged/{wildcards.flowcell}/read-XXX_si-*_{wildcards.lane}*{wildcards.read}.fastq.gz > {output}"

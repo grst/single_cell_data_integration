@@ -1,0 +1,22 @@
+chunks = [l.strip().replace(".fastq.gz","") for l in open('chunks.txt').readlines()]
+basenames = [c.replace("read-I1_si-", "read-XXX_si-") for c in chunks]
+
+rule concat_files:
+  input:
+    expand("/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq_merged/{chunk}_{read}.fastq.gz", chunk=basenames, read=["R1", "R2"])
+
+
+def _get_input_files(wildcards):
+    chunk=wildcards.chunk
+    return ["/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq_download/{}.fastq.gz".format(chunk.replace("XXX", ridx)) for ridx in ["I1", "RA"]]
+
+rule _concat_files:
+  input:
+    _get_input_files
+  output:
+    "/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq_merged/{chunk}_R1.fastq.gz",
+    "/naslx/projects/pn69di/ga75tit2/single_cell_integration/raw/zheng_bileas_2017/fastq_merged/{chunk}_R2.fastq.gz"
+  conda:
+    "env.yml"
+  shell:
+    "python ./merge_zheng_bileas.py {input} {output}"

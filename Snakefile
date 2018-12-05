@@ -24,6 +24,7 @@ DATA_PATH_FILTERED = "results/data_filtered"
 DATASETS = pd.read_csv("tables/datasets.tsv", sep="\t", index_col=0).to_dict(orient="index")
 
 
+include: "snakemake/00_process_fastq.smk"
 include: "snakemake/01_process_counts.smk"
 include: "snakemake/02_filter_data.smk"
 include: "snakemake/03_merge_data.smk"

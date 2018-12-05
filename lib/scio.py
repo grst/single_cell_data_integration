@@ -1,6 +1,21 @@
-import scanpy.api as sc
 import pandas as pd
 import numpy as np
+
+"""Definitions for metadata consistency checks"""
+MANDATORY_COLS = ["samples", "patient", "origin", "replicate",
+                  "platform", "tumor_type", "dataset"]
+
+VALID_ORIGIN = ["tumor_primary", "normal_adjacent", "tumor_edge", "blood_peripheral", "lymph_node"]
+
+VALID_PLATFORM = ["10x_3p_v1", "10x_3p_v2", "10x_5p", "indrop_v2", "smartseq2"]
+
+VALID_TUMOR_TYPE = ["LAML", "ACC", "BLCA", "LGG", "BRCA",
+        "CESC", "CHOL", "LCML", "COAD", "CNTL",
+        "ESCA", "FPPP", "GBM", "HNSC", "KICH", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC",
+        "DLBC", "MESO", "MISC", "OV", "PAAD", "PCPG", "PRAD", "READ", "SARC", "SKCM",
+        "STAD", "TGCT", "THYM", "THCA", "UCS", "UCEC", "UVM"] + \
+        ["PBMC", "NSCLC"]  # [TCGA] + [other]
+
 
 def read_10x_mtx(basename, var_names="gene_symbols"):
     """
@@ -23,7 +38,7 @@ def read_10x_mtx(basename, var_names="gene_symbols"):
         var_names: {'gene_symbols', 'gene_ids'}. Gene IDs = ENSG.
 
     """
-
+    import scanpy.api as sc
     mtx_file, barcode_file, genes_file = ["{}_{}".format(basename, part)
             for part in ("matrix.mtx", "barcodes.tsv", "genes.tsv")]
 
@@ -92,35 +107,50 @@ def check_obs(adata):
     Check that the columns in obs follow
     the naming conventions.
     """
-    obs = adata.obs
-    mandatory_cols = ["sample", "patient", "origin",
-            "replicate", "platform", "tumor_type", "dataset"]
-    for col in mandatory_cols:
+    _check_obs(adata.obs)
+
+
+def _check_obs(obs):
+    for col in MANDATORY_COLS:
         assert col in obs.columns, "{} is a mandatory column".format(col)
         assert np.sum(obs[col].isnull()) == 0, "NAs in column {}".format(col)
 
     # check sample columns
-    sample_count = obs.groupby(["patient", "origin", "replicate"])['sample'].nunique()
+    sample_count = obs.groupby(["patient", "origin", "replicate"])['samples'].nunique()
 
     assert np.all(sample_count == 1), \
             "sample must be unique for each patient, origin and replicate"
 
     # check CV
-    assert np.all(obs["origin"].isin(["tumor_primary", "normal_adjacent",
-        "tumor_edge", "blood_peripheral"])), "invalid word in column origin"
-
-    assert np.all(obs["platform"].isin(["10x_3p", "10x_3p_v2", "10x_5p",
-        "indrop_v2", "smartseq2"])), "invalid word in column platform"
+    assert np.all(obs["origin"].isin(VALID_ORIGIN)), "invalid word in column origin"
+    assert np.all(obs["platform"].isin(VALID_PLATFORM)), "invalid word in column platform"
+    assert np.all(obs["tumor_type"].isin(VALID_TUMOR_TYPE)), "invalid word in column tumor_type"
 
 
-    tcga = ["LAML", "ACC", "BLCA", "LGG", "BRCA",
-        "CESC", "CHOL", "LCML", "COAD", "CNTL",
-        "ESCA", "FPPP", "GBM", "HNSC", "KICH", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC",
-        "DLBC", "MESO", "MISC", "OV", "PAAD", "PCPG", "PRAD", "READ", "SARC", "SKCM",
-        "STAD", "TGCT", "THYM", "THCA", "UCS", "UCEC", "UVM"]
-    other = ["PBMC", "NSCLC"]
-    assert np.all(obs["tumor_type"].isin(tcga + other)), \
-                "invalid word in column tumor_type"
+def check_samples_csv(path):
+    """
+    Consistency check on a samples.csv for dropseqpipe.
+
+    Reads in a `samples.csv` used for dropseqpipe and ensures that
+    * all required fields are there
+    * all metadata required later is there
+    * all metadata uses the proper convrolled vocabulary terms
+    """
+    try:
+        samples = pd.read_csv(path, index_col=None, header=0)
+    except IOError:
+        assert False, "Samples.csv does not exist: " + path
+
+    samples_csv_mandatory_cols = ["samples", "expected_cells", "read_length", "batch"]
+
+    assert np.all(samples.columns.values[:4] == samples_csv_mandatory_cols), \
+        "First 4 columns of samples.csv must comply with dropSeqPipe specifications"
+
+    # check the medadata the same way as we check on the adata object.
+    _check_obs(samples)
+
+
+
 
 
 def check_var(adata):

@@ -1,0 +1,6 @@
+samples,expected_cells,read_length,batch,patient,origin,replicate,platform,tumor_type,dataset
+GSM3148575,10000,99,1,BC09,tumor_primary,1,10x_5p,BRCA,azizi_peer_2018_10x
+GSM3148576,10000,99,1,BC09,tumor_primary,2,10x_5p,BRCA,azizi_peer_2018_10x
+GSM3148577,10000,99,1,BC10,tumor_primary,1,10x_5p,BRCA,azizi_peer_2018_10x
+GSM3148578,10000,99,1,BC11,tumor_primary,1,10x_5p,BRCA,azizi_peer_2018_10x
+GSM3148579,10000,99,1,BC11,tumor_primary,2,10x_5p,BRCA,azizi_peer_2018_10x

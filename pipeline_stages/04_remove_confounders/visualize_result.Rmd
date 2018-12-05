@@ -44,7 +44,8 @@ adata = sc.read(INPUT_FILE)
 ## Visualize metadata
 
 ```{python}
-sc.pl.pca(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
+if "X_pca" in adata.obsm:
+  sc.pl.pca(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
 ```
 
 ```{python}

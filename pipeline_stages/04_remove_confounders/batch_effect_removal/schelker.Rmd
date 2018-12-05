@@ -41,8 +41,10 @@ setwd()
 ```
 
 ```{python}
-INPUT_FILE = r.params['input_file']
-OUT_FILE = r.params['output_file']
+INPUT_FILE = os.path.abspath(r.params['input_file'])
+OUT_FILE = os.path.abspath(r.params['output_file'])
+print(INPUT_FILE)
+print(OUT_FILE)
 ```
 
 # Apply batch effect removal as in Schelker et al (2017)
@@ -72,30 +74,30 @@ ensg_hk = np.unique(
 adata = sc.read(INPUT_FILE)
 ```
 
-Following the procedure by Schelker, we need log-transformed TPM to start with. 
-We need to 
- * undo the log transformation of `adata.raw`
+Following the procedure by Schelker, we need log-transformed TPM to start with.
+We need to
  * normalize (will give us something like tpm)
- * redo the log-transformation. 
+ * apply the log-transformation.
 
 ```{python}
-adata_raw = sc.AnnData((np.e ** adata.raw.X.todense()) -1, obs=adata.obs, var=adata.raw.var)
-sc.pp.filter_genes(adata_raw, min_cells=1)
-sc.pp.scale(adata_raw)
+sc.pp.filter_genes(adata, min_cells=1)
+sc.pp.normalize_per_cell(adata, counts_per_cell_after=3000)
+sc.pp.log1p(adata)
+adata.uns["is_log"] = True
 ```
 
 ## Compute HK score
 
 ```{python}
-ensg_hk_fil = adata_raw.var_names[adata_raw.var_names.isin(ensg_hk)]
+ensg_hk_fil = adata.var_names[adata.var_names.isin(ensg_hk)]
 ```
 
 ```{python}
-adata.uns["hk_mean"] = np.mean(adata_raw[:, ensg_hk_fil].X).copy()
+adata.uns["hk_mean"] = np.mean(adata[:, ensg_hk_fil].X).copy()
 ```
 
 ```{python}
-adata.obs["hk_score"] = np.mean(adata_raw[:, ensg_hk_fil].X, axis=1).copy()
+adata.obs["hk_score"] = np.mean(adata[:, ensg_hk_fil].X, axis=1).copy()
 ```
 
 ```{python}
@@ -104,32 +106,44 @@ adata.obs["hk_scaling_factor"] = adata.uns["hk_mean"]/adata.obs["hk_score"]
 
 ## Apply HK score
 
-```{python}
-tmp_x = adata.X * adata.obs["hk_scaling_factor"][:, np.newaxis]
+```{python apply-score}
+tmp_x = adata.X.multiply(adata.obs["hk_scaling_factor"][:, np.newaxis])
 ```
 
 ```{python}
 assert tmp_x.shape == adata.X.shape
 ```
 
-```{python}
-adata.X = tmp_x
+```{python tocsr}
+adata.X = tmp_x.tocsr()
+```
+
+### preview umap
+**(regressing out confounders has yet to happen, but we should already observe integration)**
+```{python filter-genes-dispersion}
+UMAP = True
+if UMAP:
+  adata_umap = adata.copy()
+  sc.pp.filter_genes(adata_umap, min_cells=1)
+  filter_result = sc.pp.filter_genes_dispersion(adata_umap.X, flavor="seurat", min_mean=0.0125, max_mean=3, min_disp=0.5)
+  adata_umap = adata_umap[:, filter_result.gene_subset]
+```
+
+```{python run-umap}
+if UMAP:
+  sc.pp.scale(adata_umap)
+  sc.tl.pca(adata_umap, svd_solver='arpack')
+  sc.pp.neighbors(adata_umap, n_neighbors=10, n_pcs=40)
+  sc.tl.umap(adata_umap)
 ```
 
 ```{python}
-sc.pp.scale(adata)
+if UMAP:
+  sc.pl.umap(adata_umap, color=["n_genes", "n_counts", "percent_mito", "dataset", "patient", "origin", "hk_scaling_factor"], ncols=2)
 ```
-
-```{python}
-# Important! Do this on each batch-correct output file as the next step depends on it!
-sc.tl.pca(adata, svd_solver='arpack')
-sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
-sc.tl.umap(adata)
-```
-
 ## Save results
 
-```{python}
+```{python write-adata}
 adata.write(OUT_FILE)
-adata.write_csvs(os.path.basename(OUT_FILE))
+adata.write_csvs(os.path.dirname(OUT_FILE))
 ```

@@ -51,10 +51,11 @@ def render_rmarkdown(input_file, output_file, root_dir, params=None, threads=1):
         param_str = ", ".join(["{}={}".format(key, _literal_to_r_str(value)) for key, value in params.items()])
 
     cmd = (
-        "MKL_THREADING_LAYER=GNU "  # was necessary to circumvent incompatibilities of Intel mkl with libgomp.
-        "MKL_NUM_THREADS={threads} "
-        "NUMEXPR_NUM_THREADS={threads} "
-        "OMP_NUM_THREADS={threads} "
+        "export MKL_THREADING_LAYER=GNU; "  # was necessary to circumvent incompatibilities of Intel mkl with libgomp.
+        "export MKL_NUM_THREADS={threads}; "
+        "export NUMEXPR_NUM_THREADS={threads}; "
+        "export OMP_NUM_THREADS={threads}; "
+        "export NUMBA_NUM_THREADS={threads}; "
         "Rscript --vanilla -e \"rmarkdown::render('{input_file}', "
         "   output_file='{output_file}', "
         "   output_format=bookdown::html_document2(), "

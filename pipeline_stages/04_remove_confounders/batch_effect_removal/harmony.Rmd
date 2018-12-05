@@ -70,11 +70,7 @@ pca_mat = np.matrix(adata.obsm["X_pca"])
 ```
 
 ```{r run-harmony}
-harmony_embeddings = HarmonyMatrix(py$pca_mat[1:20000,], py$batch_vector[1:20000])
-```
-
-```{python}
-adata = adata[:20000,:].copy()
+harmony_embeddings = HarmonyMatrix(py$pca_mat, py$batch_vector)
 ```
 
 ```{python}
@@ -88,5 +84,5 @@ sc.tl.umap(adata)
 
 ```{python}
 adata.write(OUT_FILE)
-adata.write_csvs(os.path.basename(OUT_FILE))
+adata.write_csvs(os.path.dirname(OUT_FILE))
 ```

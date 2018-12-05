@@ -68,5 +68,5 @@ sc.tl.umap(adata)
 
 ```{python}
 adata.write(OUT_FILE)
-adata.write_csvs(os.path.basename(OUT_FILE))
+adata.write_csvs(os.path.dirname(OUT_FILE))
 ```

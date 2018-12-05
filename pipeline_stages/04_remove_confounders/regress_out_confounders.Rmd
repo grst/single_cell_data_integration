@@ -58,10 +58,12 @@ adata = sc.read_h5ad(INPUT_FILE)
 The `raw` data object will contain counts that are log-scaled, but not normalized. These valuese will be used later for visualization of marker genes.
 
 ```{python}
-adata.raw = adata.copy()
-sc.pp.filter_genes(adata, min_cells=1)
-sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
-sc.pp.log1p(adata)
+# data could be already log-scales from a previous step.
+if 'is_log' not in adata.uns or not adata.uns['is_log']:
+    adata.raw = sc.pp.log1p(adata, copy=True)
+    sc.pp.filter_genes(adata, min_cells=1)
+    sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
+    sc.pp.log1p(adata)
 ```
 
 ## Determine cell cycle score (on full dataset)
@@ -140,14 +142,14 @@ sc.pp.scale(adata, zero_center=True)
 
 ## Visualize confounders after removal
 
-```{python}
+```{python vis-cc}
 cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
 adata_cc_genes = adata[:, cc_genes]
 sc.tl.pca(adata_cc_genes)
 sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
 ```
 
-```{python}
+```{python umap}
 sc.tl.pca(adata, svd_solver='arpack')
 sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
 sc.tl.umap(adata)

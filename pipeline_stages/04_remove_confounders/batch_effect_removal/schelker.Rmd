@@ -1,0 +1,149 @@
+---
+params:
+  input_file: NULL
+  output_file: NULL
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+---
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+from scio import concatenate
+import os.path
+import gc
+setwd()
+```
+
+```{python}
+INPUT_FILE = os.path.abspath(r.params['input_file'])
+OUT_FILE = os.path.abspath(r.params['output_file'])
+print(INPUT_FILE)
+print(OUT_FILE)
+```
+
+# Apply batch effect removal as in Schelker et al (2017)
+This approach normalizes the expression of all cells to the expression of housekeeping genes.
+Briefly outlined
+* compute a scaling factor for each sample using the raw data
+
+$$\frac{\text{mean of housekeeping genes of sample } i}{\text{mean of housekeeping genes across all samples}}$$
+
+
+* apply the scaling factor to the scaled/normalized data
+
+## Load files
+
+```{python}
+# Load housekeeping genes
+hk_genes = pd.read_csv("tables/housekeeping_genes.txt", comment="#", sep="\t")
+hk_genes.columns = ["gene_symbol", "NM"]
+biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
+
+# map them to ENSG
+ensg_hk = np.unique(
+    biomart.join(hk_genes.set_index("gene_symbol"), on="HGNC symbol", how="inner")["Gene stable ID"].values)
+```
+
+```{python}
+adata = sc.read(INPUT_FILE)
+```
+
+Following the procedure by Schelker, we need log-transformed TPM to start with.
+We need to
+ * normalize (will give us something like tpm)
+ * apply the log-transformation.
+
+```{python}
+sc.pp.filter_genes(adata, min_cells=1)
+sc.pp.normalize_per_cell(adata, counts_per_cell_after=3000)
+sc.pp.log1p(adata)
+adata.uns["is_log"] = True
+```
+
+## Compute HK score
+
+```{python}
+ensg_hk_fil = adata.var_names[adata.var_names.isin(ensg_hk)]
+```
+
+```{python}
+adata.uns["hk_mean"] = np.mean(adata[:, ensg_hk_fil].X).copy()
+```
+
+```{python}
+adata.obs["hk_score"] = np.mean(adata[:, ensg_hk_fil].X, axis=1).copy()
+```
+
+```{python}
+adata.obs["hk_scaling_factor"] = adata.uns["hk_mean"]/adata.obs["hk_score"]
+```
+
+## Apply HK score
+
+```{python apply-score}
+tmp_x = adata.X.multiply(adata.obs["hk_scaling_factor"][:, np.newaxis])
+```
+
+```{python}
+assert tmp_x.shape == adata.X.shape
+```
+
+```{python tocsr}
+adata.X = tmp_x.tocsr()
+```
+
+### preview umap
+**(regressing out confounders has yet to happen, but we should already observe integration)**
+```{python filter-genes-dispersion}
+UMAP = True
+if UMAP:
+  adata_umap = adata.copy()
+  sc.pp.filter_genes(adata_umap, min_cells=1)
+  filter_result = sc.pp.filter_genes_dispersion(adata_umap.X, flavor="seurat", min_mean=0.0125, max_mean=3, min_disp=0.5)
+  adata_umap = adata_umap[:, filter_result.gene_subset]
+```
+
+```{python run-umap}
+if UMAP:
+  sc.pp.scale(adata_umap)
+  sc.tl.pca(adata_umap, svd_solver='arpack')
+  sc.pp.neighbors(adata_umap, n_neighbors=10, n_pcs=40)
+  sc.tl.umap(adata_umap)
+```
+
+```{python}
+if UMAP:
+  sc.pl.umap(adata_umap, color=["n_genes", "n_counts", "percent_mito", "dataset", "patient", "origin", "hk_scaling_factor"], ncols=2)
+```
+## Save results
+
+```{python write-adata}
+adata.write(OUT_FILE)
+adata.write_csvs(os.path.dirname(OUT_FILE))
+```

@@ -28,7 +28,7 @@ rule _filter_data:
   """
   input:
     adata=path.join(DATA_PATH, "{dataset}/adata.h5ad"),
-    script="pipeline_stages/02_filter_data/filter_data.Rmd"
+    notebook="pipeline_stages/02_filter_data/filter_data.Rmd"
   output:
     adata=path.join(DATA_PATH_FILTERED, "{dataset}/adata.h5ad"),
     report=path.join(DATA_PATH_FILTERED, "{dataset}/report.html")
@@ -38,7 +38,7 @@ rule _filter_data:
     mem_mb=48000
   params:
     root_dir=ROOT,
-    rmd_params=lambda wildcards: dict(DATASETS[wildcards.dataset],
+    nb_params=lambda wildcards: dict(DATASETS[wildcards.dataset],
         input_file=path.join(DATA_PATH, "{}/adata.h5ad".format(wildcards.dataset)),
         output_file=path.join(DATA_PATH_FILTERED, "{}/adata.h5ad".format(wildcards.dataset)),
         doublet_detection=True)

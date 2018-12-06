@@ -1,0 +1,72 @@
+---
+jupyter:
+  jupytext_format_version: '1.0'
+  kernelspec:
+    display_name: Python [conda env:single_cell_integration]
+    language: python
+    name: conda-env-single_cell_integration-py
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+params:
+  input_file: NULL
+  output_file: NULL
+---
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+from scio import concatenate
+import os.path
+import gc
+setwd()
+```
+
+```{python}
+INPUT_FILE = r.params['input_file']
+OUT_FILE = r.params['output_file']
+```
+
+```{python}
+adata = sc.read(INPUT_FILE)
+```
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+```
+
+```{python}
+sc.pl.pca_variance_ratio(adata, log=True, n_pcs=50)
+```
+
+```{python}
+# adata.obs["batch"] = [dataset + "_" + patient for dataset, patient in zip(adata.obs["dataset"], adata.obs["patient"])]
+pass
+```
+
+```{python bbknn}
+sc.pp.bbknn(adata, batch_key='dataset', approx=True,
+            neighbors_within_batch=3, n_pcs=50)
+```
+
+```{python umap}
+sc.tl.umap(adata)
+```
+
+```{python}
+adata.write(OUT_FILE)
+adata.write_csvs(os.path.dirname(OUT_FILE))
+```

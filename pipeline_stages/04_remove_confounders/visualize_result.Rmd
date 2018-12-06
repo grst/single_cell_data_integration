@@ -1,4 +1,6 @@
 ---
+params:
+  input_file: NULL
 jupyter:
   jupytext_format_version: '1.0'
   kernelspec:
@@ -18,38 +20,36 @@ jupyter:
 ---
 
 ```{python}
-import scanorama
+# %load_ext autoreload
+# %autoreload 2
 import pandas as pd
 import scanpy.api as sc
-import os
-from pathlib import Path
 import numpy as np
-from toolz.functoolz import reduce
-import gc
-from scio import concatenate
+import sys
+sys.path.append("lib")
 from jupytertools import setwd
-```
-
-```{python}
+from scio import concatenate
+import gc
 setwd()
 ```
 
 ```{python}
-adata=adata_merged
+INPUT_FILE = r.params['input_file']
 ```
 
 ```{python}
-sc.tl.pca(adata, svd_solver='arpack')
-sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
-sc.tl.umap(adata)
+adata = sc.read(INPUT_FILE)
+```
+
+## Visualize metadata
+
+```{python}
+if "X_pca" in adata.obsm:
+  sc.pl.pca(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
 ```
 
 ```{python}
-sc.pl.pca(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
-```
-
-```{python}
-sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
+sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
 ```
 
 ```{python}
@@ -63,9 +63,4 @@ sc.pl.umap(adata, color=[ct for ct in cell_types if ct in adata.obs.columns], nc
 
 ```{python}
 sc.pl.umap(adata, color="cell_type")
-```
-
-```{python}
-# use kbet! 
-adata_merged
 ```

@@ -28,7 +28,7 @@ include: "snakemake/00_process_fastq.smk"
 include: "snakemake/01_process_counts.smk"
 include: "snakemake/02_filter_data.smk"
 include: "snakemake/03_merge_data.smk"
-# include: "snakemake/04_remove_batch_effects.smk"
+include: "snakemake/04_remove_confounders.smk"
 
 
 

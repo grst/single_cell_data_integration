@@ -1,0 +1,88 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: single_cell_integration
+    language: python
+    name: single_cell_integration
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.6
+params:
+  input_file: results/data_merged/adata.h5ad
+  output_file: /storage/scratch/harmony.h5ad
+---
+
+
+
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+from scio import concatenate
+import os.path
+import gc
+setwd()
+```
+
+```{r}
+library(harmony)
+library(magrittr)
+library(reticulate)
+```
+
+```{python}
+# work around reticulate not maintaining the python path
+setwd()
+INPUT_FILE = os.path.abspath(r.params['input_file'])
+OUT_FILE = os.path.abspath(r.params['output_file'])
+```
+
+```{python}
+adata = sc.read(INPUT_FILE)
+```
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+```
+
+```{python}
+batch_vector = adata.obs["dataset"].values.tolist()
+pca_mat = np.matrix(adata.obsm["X_pca"])
+```
+
+```{r run-harmony}
+harmony_embeddings = HarmonyMatrix(py$pca_mat, py$batch_vector)
+```
+
+```{python}
+adata.obsm["X_harmony"] = r.harmony_embeddings
+```
+
+```{python}
+sc.pp.neighbors(adata, n_neighbors=10, use_rep="X_harmony")
+sc.tl.umap(adata)
+```
+
+```{python}
+adata.write(OUT_FILE)
+adata.write_csvs(os.path.dirname(OUT_FILE))
+```

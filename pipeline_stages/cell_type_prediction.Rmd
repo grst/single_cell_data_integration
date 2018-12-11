@@ -1,0 +1,277 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.7
+---
+
+## Cell type prediction
+This notebook is to re-implement an automated cell type annotation along the lines of Schelker *at al.*
+
+### Input
+Normalized, log-transformed expression values (not scaled, but probably does not make a difference)
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import matplotlib.pyplot as plt
+import numpy as np
+import sys
+import sklearn
+sys.path.append("lib")
+from jupytertools import setwd, display
+setwd()
+```
+
+Lets first try azizi peer in drop. 
+the dataset contains all kinds of CD45+ immune cells. 
+
+```{python}
+biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
+```
+
+```{python}
+biomart
+```
+
+```{python}
+adata = sc.read_h5ad("results/data_filtered/azizi_peer_2018/adata.h5ad")
+```
+
+```{python}
+adata_umap = sc.read_h5ad("/storage/scratch/cell_type_prediction/azizi_with_umap.h5ad")
+```
+
+```{python}
+markers = pd.read_csv("https://docs.google.com/spreadsheets/d/1beW-9oeM31P50NFvNLVvsdXlfh_tOjsmIrnwV2ZlxDU/gviz/tq?tqx=out:csv&sheet=selected")
+```
+
+```{python}
+markers
+```
+
+```{python}
+markers_ensg = markers.join(biomart.set_index("HGNC symbol"), on="gene_symbol").rename(columns={"Gene stable ID": "ensg"})
+```
+
+```{python}
+markers_ensg
+```
+
+```{python}
+print("The following markers dropped out because they could not be mapped to an ENSG symbol: ")
+print(set(markers_ensg["gene_symbol"]) - set(markers["gene_symbol"]))
+```
+
+```{python}
+print("The following rows will drop out because they are not in the dataset:")
+display(markers_ensg.loc[~markers_ensg["ensg"].isin(adata.var_names), :], n=50)
+```
+
+
+
+```{python}
+print("The following genes are retained: ")
+markers_ensg = markers_ensg.loc[markers_ensg["ensg"].isin(adata.var_names), :]
+display(markers_ensg, n=100)
+```
+
+```{python}
+cell_types = markers_ensg["cell_type"].unique()
+```
+
+```{python}
+vis_adata = adata.copy()
+sc.pp.normalize_per_cell(vis_adata, counts_per_cell_after=4000)
+sc.pp.log1p(vis_adata)
+vis_adata.X = vis_adata.X # > 1
+adata_umap.raw = vis_adata
+```
+
+```{python}
+for ct in cell_types:
+    ct_markers = markers_ensg.loc[(markers_ensg["cell_type"] == ct).values, ["ensg", "gene_symbol"]].drop_duplicates()
+    markers = ct_markers["ensg"].values
+    symbols = ct_markers["gene_symbol"].values
+    title = ["{}: {}".format(ct, m) for m in symbols]
+    sc.pl.umap(adata_umap, color=markers, title=title)
+```
+
+```{python}
+sc.pl.umap(adata_umap, color="origin")
+```
+
+```{python}
+tmp_adata = adata.copy()
+sc.pp.normalize_per_cell(tmp_adata, counts_per_cell_after=4000)
+sc.pp.log1p(tmp_adata)
+```
+
+```{python}
+training_data = {}
+for ct in cell_types: 
+    ct_markers = markers_ensg.loc[(markers_ensg["cell_type"] == ct).values, ["ensg", "gene_symbol"]].drop_duplicates()
+    training_data[ct] = np.max(tmp_adata.X[:, tmp_adata.var_names.isin(ct_markers["ensg"])], axis=1) > 1
+```
+
+```{python}
+training_data_df = pd.DataFrame.from_dict(training_data, orient="columns")
+```
+
+```{python}
+training_data_df
+```
+
+```{python}
+unknown = np.sum(training_data_df.values, axis=1) == 0
+ambiguous = np.sum(training_data_df.values, axis=1) >= 2
+unambiguous = np.sum(training_data_df.values, axis=1) == 1
+```
+
+```{python}
+sum(ambiguous), sum(unknown), sum(unambiguous)
+```
+
+```{python}
+training_data_df = training_data_df.loc[unambiguous, :]
+```
+
+```{python}
+cell_type_labels = np.array(["unknown"] * tmp_adata.shape[0])
+```
+
+```{python}
+for ct in cell_types:
+    indices = training_data_df[ct][training_data_df[ct]].index
+    assert np.all(cell_type_labels[indices] == "unknown"), "cell already has a type assigned"
+    cell_type_labels[indices] = ct
+```
+
+```{python}
+adata_umap.obs["cell_type0"] = cell_type_labels
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(16, 12))
+sc.pl.umap(adata_umap, color="cell_type0", ax=ax, size=18, palette="tab10")
+```
+
+### machine learning starts here
+
+```{python}
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import confusion_matrix
+import itertools
+```
+
+```{python}
+y = cell_type_labels[cell_type_labels != "unknown"]
+X = tmp_adata.X[cell_type_labels != "unknown", :][:, ~tmp_adata.var_names.isin(markers_ensg["ensg"])]
+clf = RandomForestClassifier(n_jobs=32, n_estimators=20)
+```
+
+```{python}
+y_counts = {ct: np.sum(y_test == ct) for ct in set(y)}
+weights = [y_counts[ct] for ct in y]
+```
+
+```{python}
+skf = StratifiedKFold(n_splits=5)
+```
+
+```{python}
+
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    plt.figure()
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+```
+
+```{python}
+for train, test in skf.split(X, y):
+    X_train = X[train]
+    y_train = y[train]
+    X_test = X[test]
+    y_test = y[test]
+    y_counts = {ct: np.sum(y_test == ct) for ct in set(y_test)}
+    weights_train = [y_counts[ct]**2 for ct in y_train]
+    clf.fit(X_train, y_train, sample_weight=weights_train)
+    proba = clf.predict_proba(X_test)
+    y_pred = clf.classes_[np.argmax(proba, axis=1)]
+    y_pred[np.max(proba, axis=1) < .8] = "unknown"
+    labels = list(set(y_pred) | set(y_test))
+    cm = confusion_matrix(y_test, y_pred, labels=labels)
+    plot_confusion_matrix(cm, classes=labels)
+
+```
+
+```{python}
+clf.fit(X, y, sample_weight=weights)
+```
+
+```{python}
+proba = clf.predict_proba(tmp_adata.X[:, ~tmp_adata.var_names.isin(markers_ensg["ensg"])])
+labels = clf.classes_[np.argmax(proba, axis=1)]
+labels[np.max(proba, axis=1) <= .5] = "unknown"
+```
+
+```{python}
+adata_umap.obs["cell_type1"] = labels
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(16, 12))
+sc.pl.umap(adata_umap, color="cell_type1", ax=ax, size=16)
+```
+
+```{python}
+
+```

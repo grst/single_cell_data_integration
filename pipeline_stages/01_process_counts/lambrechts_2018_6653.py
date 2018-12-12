@@ -1,3 +1,27 @@
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.3'
+#       jupytext_version: 0.8.5
+#   kernelspec:
+#     display_name: Python 3
+#     language: python
+#     name: python3
+#   language_info:
+#     codemirror_mode:
+#       name: ipython
+#       version: 3
+#     file_extension: .py
+#     mimetype: text/x-python
+#     name: python
+#     nbconvert_exporter: python
+#     pygments_lexer: ipython3
+#     version: 3.6.7
+# ---
+
 import scanpy.api as sc
 import anndata
 import pandas as pd
@@ -12,7 +36,7 @@ OUTPUT_DIR = "results/data_processed/{}/".format(DATASET)
 
 obs = pd.read_csv(OBS_DATA).drop("batch", axis="columns")
 obs = obs.rename({
-                        "samples": "sample",
+                        "samples": "samples",
                         "Characteristics[individual]": "patient",
                         "Characteristics[sampling site]": "origin",
                         "Source Name": "replicate",
@@ -20,20 +44,10 @@ obs = obs.rename({
                         "Characteristics[age]": "age"
                 }, axis="columns")\
          .assign(tumor_type="LUAD", platform="10x_3p_v2")\
-        [["sample", "patient", "origin", "replicate", "tumor_type", "platform"]]
-
-origin_map = {
-    "tumour edge": "tumor_edge",
-    "tumour middle (in between core and edge sample)": "tumor_primary",
-    "tumour core": "tumor_primary",
-    "normal tissue adjacent to tumour": "normal_adjacent"
-}
-
-obs = obs.assign(origin = obs["origin"].apply(lambda x: origin_map[x]))\
-         .assign(replicate = obs["replicate"].apply(lambda x: x[-1]))
+        [["samples", "patient", "origin", "replicate", "tumor_type", "platform"]]
 
 
-dataset_samples = obs["sample"].values
+dataset_samples = obs["samples"].values
 
 
 filenames = ["data/{}/{}/raw_gene_bc_matrices_h5.h5".format(DATASET, sample)
@@ -41,13 +55,18 @@ filenames = ["data/{}/{}/raw_gene_bc_matrices_h5.h5".format(DATASET, sample)
 
 adatas = [sc.read_10x_h5(filename, genome="GRCh38") for filename in filenames]
 
+adatas2 = []
 for adata, sample in zip(adatas, dataset_samples):
-    adata.var['gene_symbols'] = adata.var_names
-    adata.var.set_index("gene_ids", inplace=True)
-    adata.obs['sample'] = sample
+    # adata.var['gene_symbols'] = adata.var_names
+    # adata.var.set_index("gene_ids", inplace=True)
+    duplicated = adata.var_names.duplicated()
+    print("Removing {} gene symbols because they are duplicated".format(sum(duplicated)))
+    adata = adata[:, ~duplicated].copy()
+    adata.obs['samples'] = sample
+    adatas2.append(adata)
 
-adata = concatenate(adatas, merge_var_cols=["gene_symbols"])
-adata.obs = adata.obs.join(obs.set_index("sample"), on="sample", how="left")
+adata = concatenate(adatas2, merge_var_cols=["gene_ids"])
+adata.obs = adata.obs.join(obs.set_index("samples"), on="samples", how="left")
 
 adata.obs["dataset"] = DATASET
 

@@ -1,8 +1,32 @@
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.3'
+#       jupytext_version: 0.8.5
+#   kernelspec:
+#     display_name: Python 3
+#     language: python
+#     name: python3
+#   language_info:
+#     codemirror_mode:
+#       name: ipython
+#       version: 3
+#     file_extension: .py
+#     mimetype: text/x-python
+#     name: python
+#     nbconvert_exporter: python
+#     pygments_lexer: ipython3
+#     version: 3.6.7
+# ---
+
 import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 import os.path
-from gene_identifiers import map_to_ensembl
+from gene_identifiers import map_to_ensembl, collapse_gene_symbols
 import sys
 sys.path.append("lib")
 from scio import check_obs, check_var
@@ -39,7 +63,7 @@ obs = obs.assign(origin = obs["sampleType"].apply(lambda x: origin_map[x[0]]))\
          .assign(platform = "smartseq2")\
          .rename({"Patient": "patient"}, axis="columns")
 
-obs = obs.assign(sample = obs[["patient", "origin", "replicate"]].apply(
+obs = obs.assign(samples = obs[["patient", "origin", "replicate"]].apply(
     lambda x: "_".join([str(k) for k in x]), axis=1))
 
 obs = obs.set_index("UniqueCell_ID")
@@ -49,7 +73,8 @@ raw_counts = pd.read_csv(COUNT_FILE, sep="\t")
 var = raw_counts[["geneID", "symbol"]].set_index("symbol")
 
 adata = AnnData(raw_counts.iloc[:, 2:].values.transpose(), obs, var)
-adata = map_to_ensembl(adata)
+adata = adata[:, ~pd.isna(adata.var_names)]
+# adata = map_to_ensembl(adata)
 
 adata.obs["dataset"] = DATASET
 

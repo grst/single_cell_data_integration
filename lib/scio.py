@@ -159,8 +159,22 @@ def check_var(adata):
     """
     assert adata.var_names.is_unique, "Var names must be unique"
 
-    assert np.all(x[:4] == ENSG for x in adata.var_names), \
-            "var names must be ensemble gene identifiers"
+    # For now, switched back to gene symbols. Therefore, disable
+    # ENSG checks.
+    # assert np.all(x[:4] == "ENSG" for x in adata.var_names), \
+    #        "var names must be ensemble gene identifiers"
 
-    assert "gene_symbols" in adata.var.columns, \
-            "var must contain a gene_symbols column"
+    # assert "gene_symbols" in adata.var.columns, \
+    #        "var must contain a gene_symbols column"
+
+
+    assert np.all(x[:4] != "ENSG" for x in adata.var_names), \
+           "var names must not be ensemble gene identifiers"
+
+    # check that we really deal with something like gene symbols
+    # by checking that some essential immune cell markers are
+    # present.
+    assert "CD8A" in adata.var_names
+    assert "CD8B" in adata.var_names
+    assert "CD4" in adata.var_names
+    assert "CD3E" in adata.var_names

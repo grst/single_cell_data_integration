@@ -1,3 +1,27 @@
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.3'
+#       jupytext_version: 0.8.5
+#   kernelspec:
+#     display_name: Python 3
+#     language: python
+#     name: python3
+#   language_info:
+#     codemirror_mode:
+#       name: ipython
+#       version: 3
+#     file_extension: .py
+#     mimetype: text/x-python
+#     name: python
+#     nbconvert_exporter: python
+#     pygments_lexer: ipython3
+#     version: 3.6.7
+# ---
+
 import pandas as pd
 import scanpy.api as sc
 from anndata import AnnData
@@ -10,9 +34,9 @@ DATASET = "zheng_bileas_2017"
 COUNT_FILE = "data/{}/".format(DATASET)
 OUTPUT_DIR = "results/data_processed/{}/".format(DATASET)
 
-adata = sc.read_10x_mtx(COUNT_FILE, var_names="gene_ids") # use ENSG
+adata = sc.read_10x_mtx(COUNT_FILE, var_names="gene_symbols")
 
-adata.obs = adata.obs.assign(sample = "1")\
+adata.obs = adata.obs.assign(samples = "1")\
                      .assign(patient = "1")\
                      .assign(origin = "blood_peripheral")\
                      .assign(replicate = "1")\

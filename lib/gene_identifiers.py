@@ -9,7 +9,7 @@ MART = MART.rename({
     "Gene name": "gene_name",
     "HGNC symbol": "gene_symbol"}, axis="columns")
 
-def map_to_ensembl(adata, fun=max):
+def map_to_ensembl(adata):
     """
     map gene names to ensembl using biomart.
     """
@@ -30,4 +30,27 @@ def map_to_ensembl(adata, fun=max):
     adata.var_names = var_df_ensg_nona_nodups["ensg"]
 
     return adata
+
+
+def collapse_gene_symbols(adata, fun=np.max):
+    """
+    make gene symbols unique. Aggregate multiple
+    gene symbols of the same name by `fun`.
+
+    Will densify the matrix, although it could
+    also be implemented in a sparse way.
+    """
+    # work on numpy arrays. This should also work on sparse matrices.
+    new_var_names = np.unique(adata.var_names)
+    X2 = np.zeros((adata.shape[0], len(new_var_names)))
+    for i, sym in enumerate(new_var_names):
+        X2[:, i] = fun(adata.X[:, adata.var_names == sym], axis=0)
+
+    new_var = pd.DataFrame().assign(gene_symbols = new_var_names).set_index("gene_symbols", inplace=False)
+    return AnnData(X2, obs = adata.obs, var=new_var)
+
+
+
+
+
 

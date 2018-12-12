@@ -1,3 +1,27 @@
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.3'
+#       jupytext_version: 0.8.5
+#   kernelspec:
+#     display_name: Python 3
+#     language: python
+#     name: python3
+#   language_info:
+#     codemirror_mode:
+#       name: ipython
+#       version: 3
+#     file_extension: .py
+#     mimetype: text/x-python
+#     name: python
+#     nbconvert_exporter: python
+#     pygments_lexer: ipython3
+#     version: 3.6.7
+# ---
+
 import pandas as pd
 import scanpy as sc
 from anndata import AnnData
@@ -19,13 +43,16 @@ adatas = []
 for i, row in obs.iterrows():
     filename = MTX_BASENAME.format(DATASET, sample=row['sample'], patient=row['patient'],
                                  replicate=row['replicate'])
-    adata = read_10x_mtx(filename, var_names="gene_ids")
-    adata.obs["sample"] = row["sample"]
+    adata = read_10x_mtx(filename, var_names="gene_symbols")
+    duplicated = adata.var_names.duplicated()
+    print("Removing {} gene symbols because they are duplicated".format(sum(duplicated)))
+    adata = adata[:, ~duplicated].copy()
+    adata.obs["samples"] = row["sample"]
     adatas.append(adata)
 
-adata = concatenate(adatas, merge_var_cols=["gene_symbols"])
+adata = concatenate(adatas, merge_var_cols=["gene_ids"])
 
-adata.obs = adata.obs.join(obs.set_index('sample'), on="sample", how="left")
+adata.obs = adata.obs.join(obs.set_index('sample'), on="samples", how="left")
 
 adata.obs["dataset"] = DATASET
 

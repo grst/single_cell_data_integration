@@ -48,9 +48,9 @@ setwd()
 ```
 
 ```{python}
-mito_genes = pd.read_csv("tables/mitochondrial_genes.tsv", sep="\t")["Gene name"].values
+mito_genes = np.unique(pd.read_csv("tables/mitochondrial_genes.tsv", sep="\t")["Gene name"].values)
 biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
-ribo_genes = pd.read_csv("tables/ribosomal_genes.tsv", sep="\t", comment="#")["Gene name"].values
+ribo_genes = np.unique(pd.read_csv("tables/ribosomal_genes.tsv", sep="\t", comment="#")["Gene name"].values)
 ```
 
 ```{python}
@@ -87,8 +87,8 @@ adata.obs['percent_mito'] = np.sum(
 # add the total counts per cell as observations-annotation to adata
 adata.obs['n_counts'] = adata.X.sum(axis=1)
 adata.obs['n_genes'] = (adata.X != 0).sum(axis=1)
-adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False, method="dense")
-adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True, method="dense")
+adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False, method="first")
+adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True, method="first")
 ```
 
 # Quality Metrics
@@ -171,6 +171,31 @@ sc.pl.scatter(adata, x='n_counts', y='n_genes', color='samples')
 
 # Doublet detection
 
+```{python}
+import scrublet as scr
+```
+
+```{python}
+scrub = scr.Scrublet(adata.X)
+```
+
+```{python}
+scores, doublets = scrub.scrub_doublets()
+```
+
+```{python}
+adata.obs["doublet_score"] = scores
+adata.obs["is_doublet"] = doublets
+```
+
+```{python}
+scrub.plot_histogram()
+```
+
+```{python}
+
+```
+
 ```{python fit-doubletdecon}
 if DOUBLET_DETECTION:
     import doubletdetection
@@ -201,6 +226,13 @@ sc.pp.filter_genes(adata_vis, min_cells=1)
 
 ### visualize doublets and remove them
 
+```{python}
+sc.tl.pca(adata_vis, svd_solver='arpack')
+sc.pp.neighbors(adata_vis, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata_vis)
+sc.pl.umap(adata_vis, color=["is_doublet", "doublet_score"])
+```
+
 ```{python vis-doubletdecon}
 if DOUBLET_DETECTION:
     sc.tl.pca(adata_vis, svd_solver='arpack')
@@ -230,7 +262,7 @@ sc.tl.umap(adata_vis)
 ```
 
 ```{python}
-sc.pl.umap(adata_vis, color=["n_genes", "n_counts", "percent_mito", "samples", "patient", "origin"], ncols=2)
+sc.pl.umap(adata_vis, color=["n_genes", "n_counts", "percent_mito", "sample", "patient", "origin"], ncols=2)
 ```
 
 # Louvain clustering and silhouette score

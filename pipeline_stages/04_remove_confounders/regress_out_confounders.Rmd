@@ -22,7 +22,7 @@ jupyter:
     name: python
     nbconvert_exporter: python
     pygments_lexer: ipython3
-    version: 3.6.6
+    version: 3.6.7
 ---
 
 ```{python}
@@ -70,15 +70,13 @@ if 'is_log' not in adata.uns or not adata.uns['is_log']:
 
 ```{python}
 cell_cycle_regev = pd.read_csv("tables/cell_cycle_regev.tsv", sep="\t")
-cell_cycle_regev = cell_cycle_regev.join(biomart.set_index("HGNC symbol"), on=["hgnc_symbol"], how="inner")\
-                        [["Gene stable ID", "phase"]].\
-                        drop_duplicates()
+cell_cycle_regev = cell_cycle_regev[["hgnc_symbol", "phase"]].drop_duplicates()
 ```
 
 ```{python}
 sc.tl.score_genes_cell_cycle(adata,
-                             s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","Gene stable ID"].values,
-                             g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","Gene stable ID"].values)
+                             s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","hgnc_symbol"].values,
+                             g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "M","hgnc_symbol"].values)
 ```
 
 Use the 'alternative strategy' for cell cycle effect removal from the [seurat tutorial](https://satijalab.org/seurat/cell_cycle_vignette.html#assign-cell-cycle-scores). If we regress out all effects, we might loose valuable information about dividing/non-dividing exhausted/effective T cells.
@@ -88,7 +86,7 @@ adata.obs["cell_cycle_diff"] = adata.obs["S_score"] - adata.obs["G2M_score"]
 ```
 
 ```{python}
-cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
+cc_genes = cell_cycle_regev.loc[cell_cycle_regev["hgnc_symbol"].isin(adata.var_names), "hgnc_symbol"]
 adata_cc_genes = adata[:, cc_genes]
 sc.tl.pca(adata_cc_genes)
 sc.pl.pca_scatter(adata_cc_genes, color=['phase'])
@@ -143,7 +141,7 @@ sc.pp.scale(adata, zero_center=True)
 ## Visualize confounders after removal
 
 ```{python vis-cc}
-cc_genes = cell_cycle_regev.loc[cell_cycle_regev["Gene stable ID"].isin(adata.var_names), "Gene stable ID"]
+cc_genes = cell_cycle_regev.loc[cell_cycle_regev["hgnc_symbol"].isin(adata.var_names), "hgnc_symbol"]
 adata_cc_genes = adata[:, cc_genes]
 sc.tl.pca(adata_cc_genes)
 sc.pl.pca_scatter(adata_cc_genes, color=['phase'])

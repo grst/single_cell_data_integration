@@ -40,7 +40,6 @@ rule _filter_data:
     root_dir=ROOT,
     nb_params=lambda wildcards: dict(DATASETS[wildcards.dataset],
         input_file=path.join(DATA_PATH, "{}/adata.h5ad".format(wildcards.dataset)),
-        output_file=path.join(DATA_PATH_FILTERED, "{}/adata.h5ad".format(wildcards.dataset)),
-        doublet_detection=True)
+        output_file=path.join(DATA_PATH_FILTERED, "{}/adata.h5ad".format(wildcards.dataset)))
   wrapper:
     "file:snakemake/wrappers/render_rmarkdown"

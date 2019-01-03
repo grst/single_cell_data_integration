@@ -6,7 +6,7 @@ params:
   max_genes: NULL
   min_genes: NULL
   max_frac_mito: NULL
-  doublet_detection: NULL
+  doublet_threshold: NULL
 jupyter:
   jupytext:
     text_representation:
@@ -61,7 +61,7 @@ ribo_genes = pd.read_csv("tables/ribosomal_genes.tsv", sep="\t", comment="#")["G
 MAX_GENES = r.params['max_genes']
 MIN_GENES = r.params['min_genes']
 MAX_MITO = r.params['max_frac_mito']
-DOUBLET_DETECTION = r.params['doublet_detection']
+DOUBLET_THRES = r.params['doublet_threshold']
 INPUT_FILE = r.params['input_file']
 OUTPUT_FILE = r.params['output_file']
 ```
@@ -87,8 +87,8 @@ adata.obs['percent_mito'] = np.sum(
 # add the total counts per cell as observations-annotation to adata
 adata.obs['n_counts'] = adata.X.sum(axis=1)
 adata.obs['n_genes'] = (adata.X != 0).sum(axis=1)
-adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False, method="dense")
-adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True, method="dense")
+adata.obs['rk_n_genes'] = adata.obs['n_genes'].rank(ascending=False, method="first")
+adata.obs['rk_percent_mito'] = adata.obs['percent_mito'].rank(ascending=True, method="first")
 ```
 
 # Quality Metrics
@@ -172,21 +172,38 @@ sc.pl.scatter(adata, x='n_counts', y='n_genes', color='samples')
 # Doublet detection
 
 ```{python fit-doubletdecon}
-if DOUBLET_DETECTION:
-    import doubletdetection
-    import time
-    clf = doubletdetection.BoostClassifier(n_iters=30)
-    start = time.time()
-    doublets = clf.fit(adata.X).predict(p_thresh=1e-7, voter_thresh=0.8)
-    end = time.time()
-    print('Time elapsed: {:.2f} seconds, {:.2f}sec/iteration, for {} iterations'.format(end-start, (end-start) / clf.n_iters, clf.n_iters))
+import scrublet as scr
+adata.obs["doublet_score"] = np.nan
+samples = np.unique(adata.obs["samples"])
 ```
 
-```{python doubletdecon}
-if DOUBLET_DETECTION:
-    adata.obs["doublets"] = np.array(["yes" if x else "no" for x in doublets])
-    f = doubletdetection.plot.convergence(clf)
-    plt.show()
+```{python}
+if DOUBLET_THRES < 1: 
+    for s in samples:
+        print("## working on sample {}".format(s))
+        mask = adata.obs["samples"] == s
+        adata_sub = adata[mask, :].copy()
+        scrub = scr.Scrublet(adata_sub.X)
+        scores, doublets = scrub.scrub_doublets()
+
+        # visualize
+        scrub.plot_histogram()
+        adata_sub.obs["is_doublet"] = scores > DOUBLET_THRES
+        sc.pp.normalize_per_cell(adata_sub, counts_per_cell_after=1e4)
+        sc.pp.log1p(adata_sub)
+        sc.pp.filter_genes(adata_sub, min_cells=1)
+        sc.tl.pca(adata_sub)
+        sc.pp.neighbors(adata_sub, n_neighbors=10, n_pcs=40)
+        sc.tl.umap(adata_sub)
+        sc.pl.umap(adata_sub, color="is_doublet")
+
+        # store result in global adata
+        adata.obs.loc[mask, "doublet_score"] = scores
+        print("\n\n")
+```
+
+```{python}
+adata.obs["is_doublet"] = adata.obs["doublet_score"] > DOUBLET_THRES
 ```
 
 ### Normalize (for visualization only, we will save the raw counts!)
@@ -202,19 +219,18 @@ sc.pp.filter_genes(adata_vis, min_cells=1)
 ### visualize doublets and remove them
 
 ```{python vis-doubletdecon}
-if DOUBLET_DETECTION:
-    sc.tl.pca(adata_vis, svd_solver='arpack')
-    sc.pp.neighbors(adata_vis, n_neighbors=10, n_pcs=40)
-    sc.tl.umap(adata_vis)
-    sc.pl.umap(adata_vis, color=["doublets"])
+sc.tl.pca(adata_vis, svd_solver='arpack')
+sc.pp.neighbors(adata_vis, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata_vis)
+sc.pl.umap(adata_vis, color=["is_doublet"])
+sc.pl.umap(adata_vis, color=["samples"])
 ```
 
 ```{python}
-if DOUBLET_DETECTION:
-    print(adata.shape)
-    adata = adata[adata.obs['doublets'] == "no", :]
-    adata_vis = adata_vis[adata_vis.obs['doublets'] == "no", :]
-    print(adata.shape)
+print(adata.shape)
+adata = adata[~adata.obs['is_doublet'], :]
+adata_vis = adata_vis[~adata_vis.obs['is_doublet'], :]
+print(adata.shape)
 ```
 
 ## visualize confounders
@@ -233,18 +249,18 @@ sc.tl.umap(adata_vis)
 sc.pl.umap(adata_vis, color=["n_genes", "n_counts", "percent_mito", "samples", "patient", "origin"], ncols=2)
 ```
 
-# Louvain clustering and silhouette score
+# Leiden clustering and silhouette score
 
 ```{python louvain-clustering}
-sc.tl.louvain(adata_vis)
+sc.tl.leiden(adata_vis)
 ```
 
 ```{python}
-sc.pl.umap(adata_vis, color='louvain')
+sc.pl.umap(adata_vis, color='leiden')
 ```
 
 ```{python}
-print(skm.silhouette_score(adata_vis.X, adata_vis.obs["louvain"], sample_size=2000))
+print(skm.silhouette_score(adata_vis.X, adata_vis.obs["leiden"], sample_size=2000))
 ```
 
 # save result

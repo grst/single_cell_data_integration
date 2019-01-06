@@ -1,0 +1,57 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.7
+---
+
+```{python}
+import numpy as np
+```
+
+```{python}
+true_files = !tail -n+5 guo_zhang_files_3999.txt | head -n-2
+```
+
+```{python}
+downloaded_files = !cat /storage/scratch/guo_zhang_2018/checksums.txt
+```
+
+```{python}
+checksums_dl, files_dl = zip(*[x.split() for x in downloaded_files])
+```
+
+```{python}
+files_dl = [x.split("/")[1] for x in files_dl]
+```
+
+```{python}
+files_t, checksums_t = zip(*[(x.split()[0], x.split()[3]) for x in true_files])
+```
+
+```{python}
+for f, cs in zip(files_t, checksums_t):
+    if f not in files_dl: print("{} is missing".format(f))
+    if cs not in checksums_dl: print("{}: checksum not found {}".format(f, cs))
+```
+
+```{python}
+
+```

@@ -1,0 +1,100 @@
+---
+params:
+  adata_raw: NULL
+  adata_scaled: NULL
+  output_file: NULL
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.7
+---
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import os
+import sys
+import gc
+sys.path.append("lib")
+from jupytertools import setwd
+from scio import concatenate
+import pickle
+setwd()
+```
+
+```{python}
+sys.path.append("../single_cell_classification/")
+```
+
+```{python}
+from single_cell_classification.classifier import HierarchicalCellClassifier
+from single_cell_classification.plotting import stacked_violin_plot
+```
+
+```{python}
+# OUT_FILE = "results/data_merged/adata.h5ad"
+OUT_FILE = r.params["output_file"]
+ADATA_RAW = r.params["adata_raw"]
+ADATA_SCALED = r.params["adata_scaled"]
+```
+
+```{python}
+adata_raw = sc.read_h5ad(ADATA_RAW)
+adata = sc.read_h5ad(ADATA_SCALED)
+adata.raw = adata_raw
+```
+
+```{python}
+HierarchicalCellClassifier.process_adata_raw(adata)
+```
+
+```{python}
+markers = pd.read_csv("https://docs.google.com/spreadsheets/d/1beW-9oeM31P50NFvNLVvsdXlfh_tOjsmIrnwV2ZlxDU/gviz/tq?tqx=out:csv&sheet=selected")
+clf = HierarchicalCellClassifier(markers)
+```
+
+```{python}
+labels, result_tree = clf.run_clf(adata, unknown_threshold=0.05, marker_thres=.5, cluster_threshold=.5)
+```
+
+```{python}
+labels_df = pd.DataFrame().assign(cell_type=labels)
+labels_df.to_csv(OUT_FILE, sep="\t")
+with open("results/data_integrated/cell_types/classifier.pickle", 'wb') as f:
+    pickle.dump(clf, f)
+```
+
+```{python}
+adata.obs["cell_type"] = labels
+```
+
+```{python}
+sc.pl.umap(adata, color=["cell_type"])
+```
+
+```{python}
+sc.pl.umap(adata, color=["cell_type", "dataset", "platform"])
+```
+
+```{python}
+stacked_violin_plot(clf, adata, "cell_type")
+```

@@ -32,12 +32,23 @@ rule clean:
     "results/data_integrated/_cleaned/adata.h5ad",
     "results/data_integrated/_cleaned/regress_out_confounders.html"
 
+rule annotate_cell_types:
+  """
+  run the automated cell type annotation on the cleaned
+  data.
+  """
+  input:
+    "results/data_integrated/cell_types/cell_types.tsv"
+
 
 # This is to work around the issue that snakemake does not
 # support input/output in parameters when using a wrapper script.
 # In order not to have redundant paths (which is highly probable
 # to cause mistakes) I store the paths in the dictionary
 # and reference it later.
+
+# Run integration tools that use raw counts (before regressing
+# out confounders and scaling).
 _integrate_raw_in = {
     "adata" :"results/data_merged/adata.h5ad",
     "notebook" : "pipeline_stages/04_remove_confounders/batch_effect_removal/{tool}.Rmd"
@@ -52,7 +63,7 @@ rule _integrate_raw:
   """
   input:
     adata=_integrate_raw_in['adata'],
-    notebook=_integrate_raw_in['notebook']
+    notebook=_integrate_raw_in['notebook'],
   output:
     adata=_integrate_raw_out['adata'],
     report=_integrate_raw_out['report']
@@ -71,6 +82,7 @@ rule _integrate_raw:
     "file:snakemake/wrappers/render_rmarkdown"
 
 
+# Regress out confounders and scale/normalize raw data.
 _clean_raw_in={
     "adata" :"results/data_merged/adata.h5ad",
     "notebook" : "pipeline_stages/04_remove_confounders/regress_out_confounders.Rmd"
@@ -82,7 +94,8 @@ _clean_raw_out={
 rule _clean_raw:
   """
   Run the 'scaling/regress_out' step
-  on the raw gene expression data
+  on the raw gene expression data. This
+  is done before calling harmony/bbknn/scanorama or similar tools.
   """
   input:
     adata=_clean_raw_in['adata'],
@@ -92,7 +105,7 @@ rule _clean_raw:
     report=_clean_raw_out['report']
   threads: 32
   conda:
-    "../envs/merge_data.yml"
+    "../envs/remove_batch_effects.yml"
   params:
     root_dir=ROOT,
     nb_params = lambda wildcards: dict(
@@ -103,6 +116,46 @@ rule _clean_raw:
     "file:snakemake/wrappers/render_rmarkdown"
 
 
+# Annotate cell types
+_annotate_ct_in={
+    "adata_scaled" : "results/data_integrated/_cleaned/adata.h5ad",
+    "adata_raw" : "results/data_merged/adata.h5ad",
+    "notebook" : "pipeline_stages/04_remove_confounders/annotate_cell_types.Rmd"
+}
+_annotate_ct_out={
+    "table" : "results/data_integrated/cell_types/cell_types.tsv",
+    "report" : "results/data_integrated/cell_types/annotate_cell_types.html"
+}
+rule _annotate_cell_types:
+  """
+  Annotate cell types automatically.
+  Runs on the cleaned/scaled data, but before
+  batch effect correction. (Need this information
+  to assess batch effect correction tools).
+  """
+  input:
+    adata_raw=_annotate_ct_in['adata_raw'],
+    adata_scaled=_annotate_ct_in['adata_scaled'],
+    notebook=_annotate_ct_in['notebook']
+  output:
+    table=_annotate_ct_out['table'],
+    report=_annotate_ct_out['report']
+  threads: 32
+  conda:
+    "../envs/annotate_cell_types.yml"
+  params:
+    root_dir=ROOT,
+    nb_params = lambda wildcards: dict(
+      adata_raw=_annotate_ct_in['adata_raw'],
+      adata_scaled=_annotate_ct_in['adata_scaled'],
+      output_file=_annotate_ct_out['table']
+    )
+  wrapper:
+    "file:snakemake/wrappers/render_rmarkdown"
+
+
+# Run the 'regress_out_coufounders' step on
+# already integrated data (e.g. Schelker's approach)
 _clean_integrated_in = {
     "adata":"results/data_integrated/_integrated/{tool}/adata.h5ad",
     "notebook":"pipeline_stages/04_remove_confounders/regress_out_confounders.Rmd"
@@ -138,6 +191,8 @@ rule _clean_integrated:
     "file:snakemake/wrappers/render_rmarkdown"
 
 
+# Run harmony/scanorama/bbknn on the
+# already scaled data.
 _integrate_cleaned_in = {
     "adata":"results/data_integrated/_cleaned/adata.h5ad",
     "notebook":"pipeline_stages/04_remove_confounders/batch_effect_removal/{tool}.Rmd"
@@ -172,6 +227,7 @@ rule _integrate_cleaned:
     "file:snakemake/wrappers/render_rmarkdown"
 
 
+# Visualize the results of the different integration tools.
 _visualize_results_in = dict(
     adata="results/data_integrated/final/{tool}/adata.h5ad",
     notebook="pipeline_stages/04_remove_confounders/visualize_result.Rmd"

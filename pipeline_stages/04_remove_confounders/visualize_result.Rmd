@@ -2,11 +2,16 @@
 params:
   input_file: NULL
 jupyter:
-  jupytext_format_version: '1.0'
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
   kernelspec:
-    display_name: Python [conda env:single_cell_integration]
+    display_name: Python 3
     language: python
-    name: conda-env-single_cell_integration-py
+    name: python3
   language_info:
     codemirror_mode:
       name: ipython
@@ -16,7 +21,7 @@ jupyter:
     name: python
     nbconvert_exporter: python
     pygments_lexer: ipython3
-    version: 3.6.6
+    version: 3.6.7
 ---
 
 ```{python}
@@ -45,11 +50,11 @@ adata = sc.read(INPUT_FILE)
 
 ```{python}
 if "X_pca" in adata.obsm:
-  sc.pl.pca(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
+    sc.pl.pca(adata, color=["dataset", "platform", "cell_type", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["dataset", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
+sc.pl.umap(adata, color=["dataset", "platform", "cell_type", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
 ```
 
 ```{python}

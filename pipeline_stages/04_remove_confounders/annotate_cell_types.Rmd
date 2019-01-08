@@ -73,7 +73,8 @@ clf = HierarchicalCellClassifier(markers)
 ```
 
 ```{python}
-labels, result_tree = clf.run_clf(adata, unknown_threshold=0.05, marker_thres=.5, cluster_threshold=.5)
+labels, result_tree = clf.run_clf(adata, unknown_threshold=0.05, marker_thres=.5, cluster_threshold=.5,
+                            leiden_resolution=2)
 ```
 
 ```{python}

@@ -5,6 +5,7 @@ notebooks
 """
 import pandas as pd
 import os
+import logging
 
 PD_DEFAULT_ROWS = 6
 
@@ -46,3 +47,20 @@ def setwd(max_levels=7):
     print("Working directory is {}".format(os.path.abspath(os.getcwd())))
 
 
+def fix_logging():
+    """
+    Workaround for rstudio/reticulate#386.
+
+    Get all logger instances and add a custom PrintHandler,
+    as writing to Stdout doesn't seem to work.
+    """
+    class PrintHandler(logging.Handler):
+        def emit(self, record):
+            print(self.format(record))
+
+    for name, logger in logging.Logger.manager.loggerDict.items():
+        try:
+            logger.handlers = []
+            logger.addHandler(PrintHandler())
+        except AttributeError:
+            pass

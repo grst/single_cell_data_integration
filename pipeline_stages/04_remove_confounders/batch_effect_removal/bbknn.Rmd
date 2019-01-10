@@ -33,11 +33,12 @@ import scanpy.api as sc
 import numpy as np
 import sys
 sys.path.append("lib")
-from jupytertools import setwd
+from jupytertools import setwd, fix_logging
 from scio import concatenate
 import os.path
 import gc
 setwd()
+fix_logging()
 ```
 
 ```{python}

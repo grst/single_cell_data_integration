@@ -34,10 +34,11 @@ import os
 import sys
 import gc
 sys.path.append("lib")
-from jupytertools import setwd
+from jupytertools import setwd, fix_logging
 from scio import concatenate
 from scpp import norm_log
 setwd()
+fix_logging()
 ```
 
 ```{python}
@@ -161,6 +162,4 @@ sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "phase", "datase
 # save result
 ```{python write-results}
 adata.write(OUT_FILE, compression="lzf")
-adata.write_csvs(os.path.dirname(OUT_FILE))
 ```
-

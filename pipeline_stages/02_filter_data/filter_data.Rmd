@@ -45,6 +45,7 @@ import sklearn.metrics as skm
 sys.path.append("lib")
 from jupytertools import *
 setwd()
+fix_logging()
 ```
 
 ```{python}

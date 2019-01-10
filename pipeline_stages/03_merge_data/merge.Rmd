@@ -34,9 +34,10 @@ import os
 import sys
 import gc
 sys.path.append("lib")
-from jupytertools import setwd
+from jupytertools import setwd, fix_logging
 from scio import concatenate
 setwd()
+fix_logging()
 ```
 
 ```{python}

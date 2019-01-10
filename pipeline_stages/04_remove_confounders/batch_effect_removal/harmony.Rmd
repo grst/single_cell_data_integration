@@ -1,4 +1,7 @@
 ---
+params:
+  input_file: results/data_merged/adata.h5ad
+  output_file: /storage/scratch/harmony.h5ad
 jupyter:
   jupytext:
     text_representation:
@@ -20,9 +23,6 @@ jupyter:
     nbconvert_exporter: python
     pygments_lexer: ipython3
     version: 3.6.6
-params:
-  input_file: results/data_merged/adata.h5ad
-  output_file: /storage/scratch/harmony.h5ad
 ---
 
 
@@ -36,11 +36,12 @@ import scanpy.api as sc
 import numpy as np
 import sys
 sys.path.append("lib")
-from jupytertools import setwd
+from jupytertools import setwd, fix_logging
 from scio import concatenate
 import os.path
 import gc
 setwd()
+fix_logging()
 ```
 
 ```{r}

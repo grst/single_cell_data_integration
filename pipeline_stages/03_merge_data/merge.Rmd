@@ -103,6 +103,5 @@ sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
 # save result
 ```{python write-results}
 adata.write(OUT_FILE, compression="lzf")
-adata.write_csvs(os.path.dirname(OUT_FILE))
 ```
 

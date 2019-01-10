@@ -179,7 +179,7 @@ samples = np.unique(adata.obs["samples"])
 ```
 
 ```{python}
-if DOUBLET_THRES < 1: 
+if DOUBLET_THRES < 1:
     for s in samples:
         print("## working on sample {}".format(s))
         mask = adata.obs["samples"] == s
@@ -267,5 +267,4 @@ print(skm.silhouette_score(adata_vis.X, adata_vis.obs["leiden"], sample_size=200
 # save result
 ```{python write-results}
 adata.write(OUTPUT_FILE, compression="lzf")
-adata.write_csvs(os.path.dirname(OUTPUT_FILE))
 ```

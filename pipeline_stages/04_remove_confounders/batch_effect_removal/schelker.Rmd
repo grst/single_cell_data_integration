@@ -66,10 +66,6 @@ $$\frac{\text{mean of housekeeping genes of sample } i}{\text{mean of housekeepi
 hk_genes = pd.read_csv("tables/housekeeping_genes.txt", comment="#", sep="\t")
 hk_genes.columns = ["gene_symbol", "NM"]
 biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
-
-# map them to ENSG
-ensg_hk = np.unique(
-    biomart.join(hk_genes.set_index("gene_symbol"), on="HGNC symbol", how="inner")["Gene stable ID"].values)
 ```
 
 ```{python}
@@ -88,15 +84,15 @@ norm_log(adata)
 ## Compute HK score
 
 ```{python}
-ensg_hk_fil = adata.var_names[adata.var_names.isin(ensg_hk)]
+hk_fil = adata.var_names[adata.var_names.isin(hk_genes["gene_symbol"])]
 ```
 
 ```{python}
-adata.uns["hk_mean"] = np.mean(adata[:, ensg_hk_fil].X).copy()
+adata.uns["hk_mean"] = np.mean(adata[:, hk_fil].X).copy()
 ```
 
 ```{python}
-adata.obs["hk_score"] = np.mean(adata[:, ensg_hk_fil].X, axis=1).copy()
+adata.obs["hk_score"] = np.mean(adata[:, hk_fil].X, axis=1).copy()
 ```
 
 ```{python}
@@ -144,5 +140,4 @@ if UMAP:
 
 ```{python write-adata}
 adata.write(OUT_FILE)
-adata.write_csvs(os.path.dirname(OUT_FILE))
 ```

@@ -82,4 +82,3 @@ check_obs(adata)
 check_var(adata)
 
 adata.write(os.path.join(OUTPUT_DIR, "adata.h5ad"), compression='lzf')
-adata.write_csvs(OUTPUT_DIR)

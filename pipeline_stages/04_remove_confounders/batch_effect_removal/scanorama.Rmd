@@ -82,5 +82,4 @@ sc.tl.umap(adata_corrected)
 
 ```{python store_output}
 adata_corrected.write(OUT_FILE)
-adata_corrected.write_csvs(os.path.dirname(OUT_FILE))
 ```

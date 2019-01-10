@@ -36,6 +36,7 @@ import gc
 sys.path.append("lib")
 from jupytertools import setwd
 from scio import concatenate
+from scpp import norm_log
 setwd()
 ```
 
@@ -55,15 +56,11 @@ adata = sc.read_h5ad(INPUT_FILE)
 
 ## Normalize and scale
 
-The `raw` data object will contain counts that are log-scaled, but not normalized. These valuese will be used later for visualization of marker genes.
+The `raw` data object will contain normalized, log-transformed values for visualiation. 
+The original, raw (UMI) counts are stored in `adata.obsm["raw_counts"]`. 
 
 ```{python}
-# data could be already log-scales from a previous step.
-if 'is_log' not in adata.uns or not adata.uns['is_log']:
-    adata.raw = sc.pp.log1p(adata, copy=True)
-    sc.pp.filter_genes(adata, min_cells=1)
-    sc.pp.normalize_per_cell(adata, counts_per_cell_after=1e4)
-    sc.pp.log1p(adata)
+norm_log(adata)
 ```
 
 ## Determine cell cycle score (on full dataset)

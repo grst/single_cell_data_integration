@@ -2,6 +2,13 @@
 Bring all datasets in a consistent format. Every dataset
 needs to be saved in `results/data_processed` as a `h5ad` file.
 
+## Input
+* count data as downloaded from the public database
+* sample/cell-level metadata wherever available
+
+## Output
+* a `scanpy` `AnnData` object for each dataset, containing raw (UMI) counts and the following metadata as `.obs`.
+
 ## Metadata
 Metadata needs to have consistent column names. Columns in **bold** are mandatory.
 

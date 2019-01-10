@@ -1,10 +1,18 @@
 ---
+params:
+  input_file: NULL
+  output_file: NULL
 jupyter:
-  jupytext_format_version: '1.0'
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
   kernelspec:
-    display_name: Python [conda env:single_cell_integration]
+    display_name: Python 3
     language: python
-    name: conda-env-single_cell_integration-py
+    name: python3
   language_info:
     codemirror_mode:
       name: ipython
@@ -14,10 +22,7 @@ jupyter:
     name: python
     nbconvert_exporter: python
     pygments_lexer: ipython3
-    version: 3.6.6
-params:
-  input_file: NULL
-  output_file: NULL
+    version: 3.6.7
 ---
 
 ```{python}

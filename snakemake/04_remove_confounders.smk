@@ -1,3 +1,15 @@
+"""
+Remove
+  * coufounding factors, such as fraction of mito-genes or
+    reads per cell
+  * batch effects, i.e. the influence of datasets using
+    different tools
+  * normalize and scale the data -> prepare for PCA/UMAP/downstream
+    analysis.
+
+"""
+
+
 from snakemake.io import Namedlist
 
 # tools that operate on the raw gene expression (before cleaning)
@@ -16,9 +28,9 @@ rule remove_confounders:
   effect removal tools that are applied as the last processing step
   after scaling and regressing out confounders. """
   input:
-    expand("results/data_integrated/final/{tool}/adata.h5ad", tool=INTEGRATION_TOOLS_RAW +
+    expand("results/data_integrated/batch_effects_removed/{tool}/adata.h5ad", tool=INTEGRATION_TOOLS_RAW +
       INTEGRATION_TOOLS_PROCESSED),
-    expand("results/data_integrated/final/{tool}/visualize_results.html", tool=INTEGRATION_TOOLS_RAW +
+    expand("results/data_integrated/batch_effects_removed/{tool}/visualize_results.html", tool=INTEGRATION_TOOLS_RAW +
       INTEGRATION_TOOLS_PROCESSED)
 
 rule clean:
@@ -161,8 +173,8 @@ _clean_integrated_in = {
     "notebook":"pipeline_stages/04_remove_confounders/regress_out_confounders.Rmd"
 }
 _clean_integrated_out = {
-    "adata":"results/data_integrated/final/{tool}/adata.h5ad",
-    "report":"results/data_integrated/final/{tool}/regress_out_confounders.html"
+    "adata":"results/data_integrated/batch_effects_removed/{tool}/adata.h5ad",
+    "report":"results/data_integrated/batch_effects_removed/{tool}/regress_out_confounders.html"
 }
 rule _clean_integrated:
   """
@@ -198,8 +210,8 @@ _integrate_cleaned_in = {
     "notebook":"pipeline_stages/04_remove_confounders/batch_effect_removal/{tool}.Rmd"
 }
 _integrate_cleaned_out = {
-    "adata":"results/data_integrated/final/{tool}/adata.h5ad",
-    "report":"results/data_integrated/final/{tool}/remove_batch_effects.html"
+    "adata":"results/data_integrated/batch_effects_removed/{tool}/adata.h5ad",
+    "report":"results/data_integrated/batch_effects_removed/{tool}/remove_batch_effects.html"
 }
 rule _integrate_cleaned:
   """
@@ -229,11 +241,11 @@ rule _integrate_cleaned:
 
 # Visualize the results of the different integration tools.
 _visualize_results_in = dict(
-    adata="results/data_integrated/final/{tool}/adata.h5ad",
+    adata="results/data_integrated/batch_effects_removed/{tool}/adata.h5ad",
     notebook="pipeline_stages/04_remove_confounders/visualize_result.Rmd"
 )
 _visualize_results_out = {
-    "report" : "results/data_integrated/final/{tool}/visualize_results.html"
+    "report" : "results/data_integrated/batch_effects_removed/{tool}/visualize_results.html"
 }
 rule _visualize_results:
   """

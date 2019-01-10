@@ -46,26 +46,19 @@ INPUT_FILE = r.params['input_file']
 adata = sc.read(INPUT_FILE)
 ```
 
+```{python}
+cell_types = pd.read_csv("results/data_integrated/cell_types/cell_types.tsv", sep="\t")
+assert cell_types.values.shape[0] == adata.shape[0]
+adata.obs["cell_type"] = cell_types["cell_type"].values
+```
+
 ## Visualize metadata
 
 ```{python}
 if "X_pca" in adata.obsm:
-    sc.pl.pca(adata, color=["dataset", "platform", "cell_type", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
+    sc.pl.pca(adata, color=["dataset", "cell_type", "platform", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
 ```
 
 ```{python}
-sc.pl.umap(adata, color=["dataset", "platform", "cell_type", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin", "platform"], ncols=2)
-```
-
-```{python}
-mcp_sig = pd.read_csv("tables/mcp_counter_signatures.txt", sep="\t")
-cell_types = np.unique(mcp_sig["Cell population"].values)
-```
-
-```{python}
-sc.pl.umap(adata, color=[ct for ct in cell_types if ct in adata.obs.columns], ncols=2)
-```
-
-```{python}
-sc.pl.umap(adata, color="cell_type")
+sc.pl.umap(adata, color=["dataset", "cell_type", "platform", "n_genes", "n_counts", "percent_mito", "phase", "patient", "origin"], ncols=2)
 ```

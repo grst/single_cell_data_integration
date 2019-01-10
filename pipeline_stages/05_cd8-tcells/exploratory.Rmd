@@ -1,0 +1,150 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.7
+---
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+setwd()
+```
+
+```{python}
+adata = sc.read_h5ad("results/data_integrated/final/harmony/adata.h5ad")
+```
+
+```{python}
+cell_types = pd.read_csv("results/data_integrated/cell_types/cell_types.tsv", sep="\t")
+```
+
+```{python}
+assert cell_types.values.shape[0] == adata.shape[0]
+```
+
+```{python}
+adata.obs["cell_type"] = cell_types["cell_type"].values
+```
+
+```{python}
+sc.pl.pca(adata, color=["dataset", "cell_type"])
+```
+
+```{python}
+sc.pl.umap(adata, color=["dataset", "cell_type", "origin", "patient", "platform"], ncols=2)
+```
+
+```{python}
+sc.pl.umap(adata, color=["CD8A", "CD8B", "CD4", "FOXP3"], ncols=2)
+```
+
+```{python}
+mask_cell = adata.obs["cell_type"].isin(["T cell CD8+", "T cell CD4+", "T cell reg.", "NK cell"])
+mask_origin = adata.obs["origin"].isin(["tumor_primary", "tumor_edge"]).values 
+```
+
+```{python}
+tdata = adata[mask_cell & mask_origin, :].copy()
+```
+
+```{python}
+sc.pp.neighbors(tdata, n_neighbors=10, use_rep="X_harmony")
+sc.tl.umap(tdata)
+sc.tl.leiden(tdata)
+```
+
+```{python}
+sc.pl.umap(tdata, color=["dataset", "cell_type", "origin", "patient", "n_counts", "platform", "tumor_type", "leiden"], ncols=2)
+```
+
+```{python}
+sc.pl.umap(tdata, color=["CD8A", "CD3E", "CD8B", "CD4", "FOXP3"], ncols=2)
+```
+
+```{python}
+sc.pl.umap(tdata, color=["PDCD1", "HAVCR2", "LAG3"], ncols=2)
+```
+
+```{python}
+sc.pl.umap(tdata, color=["PRF1", "GZMB"])
+```
+
+```{python}
+sc.pl.umap(tdata, color=["CD44", "KLRG1"])
+```
+
+```{python}
+sc.pl.umap(tdata, color="leiden")
+```
+
+```{python}
+sc.tl.diffmap(tdata)
+sc.pp.neighbors(tdata, n_neighbors=10, use_rep='X_diffmap')
+```
+
+```{python}
+sc.tl.draw_graph(tdata)
+sc.pl.draw_graph(tdata)
+```
+
+```{python}
+sc.tl.leiden(tdata)
+```
+
+```{python}
+sc.tl.paga(tdata, groups='leiden')
+sc.pl.paga(tdata)
+```
+
+```{python}
+sc.tl.draw_graph(tdata, init_pos='paga')
+sc.pl.draw_graph(tdata, color='leiden', legend_loc='on data')
+```
+
+```{python}
+sc.pl.draw_graph(tdata, color=["dataset", "origin", "platform", "tumor_type", "n_counts", "n_genes"])
+```
+
+```{python}
+sc.pl.draw_graph(tdata, color=["cell_type", "CD4", "CD8A", "CD8B", "NCAM1", "FOXP3"])
+```
+
+```{python}
+sc.pl.draw_graph(tdata, color=["LAG3", "PDCD1", "IL2RA", "HAVCR2", "PRF1", "GZMB", "CD44", "KLRG1", "ENTPD1", "ITGAE", "KLRG1"], ncols=4)
+```
+
+```{python}
+sc.pl.umap(tdata, color=["LAG3", "PDCD1", "IL2RA", "HAVCR2", "PRF1", "GZMB", "CD44", "KLRG1", "ENTPD1", "ITGAE", "KLRG1"])
+```
+
+```{python}
+sc.tl.rank_genes_groups(tdata, 'leiden', method='t-test')
+sc.pl.rank_genes_groups(tdata, n_genes=25, sharey=False)
+```
+
+```{python}
+
+```

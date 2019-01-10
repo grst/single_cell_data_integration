@@ -35,6 +35,7 @@ import sys
 sys.path.append("lib")
 from jupytertools import setwd
 from scio import concatenate
+from scpp import norm_log
 import os.path
 import gc
 setwd()
@@ -80,10 +81,7 @@ We need to
  * apply the log-transformation.
 
 ```{python}
-sc.pp.filter_genes(adata, min_cells=1)
-sc.pp.normalize_per_cell(adata, counts_per_cell_after=3000)
-sc.pp.log1p(adata)
-adata.uns["is_log"] = True
+norm_log(adata)
 ```
 
 ## Compute HK score

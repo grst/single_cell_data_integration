@@ -33,7 +33,8 @@ import numpy as np
 import sys
 sys.path.append("lib")
 from jupytertools import setwd
-from scio import concatenate, fix_logging
+from scio import concatenate
+from jupytertools import fix_logging
 import gc
 setwd()
 fix_logging()

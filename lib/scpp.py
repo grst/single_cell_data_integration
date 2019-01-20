@@ -4,6 +4,7 @@ scingle cell datasets
 """
 import scanpy.api as sc
 import numpy as np
+import warnings
 
 def norm_log(adata):
     """
@@ -28,7 +29,7 @@ def norm_log(adata):
         Warning instead.
     """
     if "norm_log" in adata.uns and adata.uns["norm_log"]:
-        raise Warning("This adata object has already been processed"
+        warnings.warn("This adata object has already been processed"
                       " using the `norm_log` function. Will do"
                       " nothing this time. ")
     else:

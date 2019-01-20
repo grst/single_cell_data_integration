@@ -152,7 +152,7 @@ rule _annotate_cell_types:
   output:
     table=_annotate_ct_out['table'],
     report=_annotate_ct_out['report']
-  threads: 32
+  threads: 16
   conda:
     "../envs/annotate_cell_types.yml"
   params:
@@ -254,7 +254,8 @@ rule _visualize_results:
   """
   input:
     adata=_visualize_results_in['adata'],
-    notebook=_visualize_results_in['notebook']
+    notebook=_visualize_results_in['notebook'],
+    cell_types="results/data_integrated/cell_types/cell_types.tsv"
   output:
     report=_visualize_results_out['report']
   threads: 8

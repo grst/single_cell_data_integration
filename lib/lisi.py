@@ -1,6 +1,7 @@
 import numpy as np
 from numba import jit
 import scanpy.api as sc
+import pandas as pd
 
 
 @jit(nopython=True)
@@ -20,23 +21,46 @@ def _lisi(i, connectivities, annot_vec, levels):
     return inverse_simpson_index(probabs)
 
 
-def lisi(adata, annot_col):
+def lisi_connectivities(adata, n_neighbors=30, type="gaussian"):
+    """
+
+    Parameters
+    ----------
+    adata : AnnData
+    n_neighbors : int
+        number of neighbors. Either as gaussian kernel width (`type = 'gaussian'`)
+        or as number of fixed neighbors (`type = 'fixed'`). In the Harmony paper,
+        they use a gaussian kernel with width of 30.
+    type : str
+        `gaussian` or `fixed`.
+
+    Returns
+    -------
+    np.array (2d)
+        adjacency matrix
+
+    """
+    print("Computing connectivities using `sc.pp.neighbors`.")
+    if type == 'gaussian':
+        tmp_adata = sc.pp.neighbors(adata, n_neighbors=n_neighbors, knn=False, method='gauss', copy=True)
+        return tmp_adata.uns['neighbors']['connectivities']
+
+    else:
+        tmp_adata = sc.pp.neighbors(adata, n_neighbors=n_neighbors, copy=True)
+        return tmp_adata.uns['neighbors']['connectivities'].toarray()
+
+
+def lisi(connectivities, labels):
     """
     Compute the locally inversed Simpson Index (Harmony paper)
 
     Parameters:
-        adata : AnnData
-        annot_col : str
-            index of the *categorical* column in `adata.obs`. E.g. `cell_type`
-            or `batch`.
+        connectivities : np.array
+            adjacency matrix computed with `lisi_connectivities` or `sc.pp.neighbors`.
+        labels : np.array
+            numpy array containing a label for each cell.
     """
-    if 'lisi_connectivities' not in adata.uns:
-        print("Computing connectivities using `sc.pp.neighbors`.")
-        tmp_adata = sc.pp.neighbors(adata, n_neighbors=30, knn=False, method='gauss', copy=True)
-        adata.uns['lisi_connectivities'] = tmp_adata.uns['neighbors']['connectivities']
-        del tmp_adata
-    annot_vec = adata.obs[annot_col].cat.codes.values
+    annot_vec = pd.Series(labels, dtype="category").cat.codes.values
     levels = np.unique(annot_vec)
-    return np.array([_lisi(i, adata.uns['lisi_connectivities'], annot_vec, levels)
-                     for i in range(adata.shape[0])])
-
+    return np.array([_lisi(i, connectivities, annot_vec, levels)
+                     for i in range(len(labels))])

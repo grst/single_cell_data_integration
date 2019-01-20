@@ -1,0 +1,166 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.7
+---
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+from jupytertools import fix_logging
+import gc
+setwd()
+fix_logging()
+from lisi import lisi, lisi_connectivities
+from bbknn import bbknn
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from multiprocessing import Pool
+```
+
+## Load the different datasets
+
+```{python}
+# unintegrated, but normalized, confounding factors removed etc. 
+adata = sc.read_h5ad("results/data_integrated/_cleaned/adata.h5ad")
+```
+
+```{python}
+# add cell type annotation
+cell_types = pd.read_csv("results/data_integrated/cell_types/cell_types.tsv", sep="\t")
+assert cell_types.values.shape[0] == adata.shape[0]
+adata.obs["cell_type"] = cell_types["cell_type"].values
+```
+
+```{python}
+# schelker
+tmp_adata = sc.read_h5ad("results/data_integrated/batch_effects_removed/schelker/adata.h5ad")
+adata.obsm["X_pca_schelker"] = tmp_adata.obsm["X_pca"]
+adata.obsm["X_umap_schelker"] = tmp_adata.obsm["X_umap"]
+del tmp_adata
+```
+
+```{python}
+# harmony
+tmp_adata = sc.read_h5ad("results/data_integrated/batch_effects_removed/harmony/adata.h5ad")
+adata.obsm["X_pca_harmony"] = tmp_adata.obsm["X_harmony"]
+adata.obsm["X_umap_harmony"] = tmp_adata.obsm["X_umap"]
+del tmp_adata
+```
+
+```{python}
+# scanorama
+tmp_adata = sc.read_h5ad("results/data_integrated/batch_effects_removed/scanorama/adata.h5ad")
+adata.obsm["X_pca_scanorama"] = tmp_adata.obsm["X_scanorama"]
+adata.obsm["X_umap_scanorama"] = tmp_adata.obsm["X_umap"]
+del tmp_adata
+```
+
+```{python}
+# bbknn
+tmp_adata = sc.read_h5ad("results/data_integrated/batch_effects_removed/bbknn/adata.h5ad")
+# PCA-level embedding of bbknn does not exist, as it directy works on the neighborhood graph. 
+adata.obsm["X_umap_bbknn"] = tmp_adata.obsm["X_umap"]
+del tmp_adata
+```
+
+```{python}
+tools = ["No integration", "Schelker", "Harmony", "BBKNN", "Scanorama"]
+```
+
+```{python}
+# subsample for dev
+sc.pp.subsample(adata, n_obs=6000)
+```
+
+```{python}
+def plot_umap(adata, ax, title="umap", size=.1, rep="X_umap", color="dataset"):
+    color_vec = adata.uns["dataset_colors"][adata.obs["dataset"].cat.codes.values]
+    ax.scatter(adata.obsm[rep][:, 0], adata.obsm[rep][:, 1], s=size,
+            c=color_vec)
+    ax.set_xlabel("UMAP1")
+    ax.set_xticks([])
+    ax.set_ylabel("UMAP2")
+    ax.set_yticks([])
+    ax.set_title(title)
+```
+
+```{python}
+fig, axs = plt.subplots(nrows=2, ncols=4, figsize=(12, 8))
+for rep, title, ax in zip(["X_umap", "X_umap_schelker", "X_umap_harmony",
+                           "X_umap_bbknn", "X_umap_scanorama"],
+                          ["No integration", "Schelker", "Harmony", "BBKNN", "Scanorama"],
+                          axs.flatten()):
+    plot_umap(adata, ax, title, rep=rep)
+
+legend_elements = []
+labels = np.unique(adata.obs["dataset"].values)
+for color, label in zip(adata.uns["dataset_colors"], labels):
+    legend_elements.append(Line2D([0], [0], marker='o', color='w', markerfacecolor=color, label=label, markersize=15))
+fig.legend(legend_elements, labels, loc="upper center", ncol=4, title="dataset")
+```
+
+```{python}
+def get_connectivities(adata, tool=None, neighbors_per_batch=15, nbatches=1):
+    tool = tool.lower()
+    if tool == "bbknn":
+        bbknn(adata, neighbors_within_batch=neighbors_per_batch)
+        return adata.uns["neighbors"]["connectivities"].toarray()
+    else: 
+        rep = "X_pca" if tool == "no integration" else "X_pca_{}".format(tool)
+        sc.pp.neighbors(adata, n_neighbors=neighbors_per_batch*nbatches, use_rep=rep)
+        return adata.uns["neighbors"]["connectivities"].toarray()
+            
+```
+
+```{python}
+p=Pool(8)
+```
+
+```{python}
+connectivities = p.starmap(get_connectivities,
+                           [(adata, t, 15, len(np.unique(adata.obs["dataset"].values))) for t in tools])
+```
+
+```{python}
+dataset_lisi = p.starmap(lisi, [(c, adata.obs["dataset"].values) for c in connectivities])
+ct_lisi = p.starmap(lisi, [(c, adata.obs["cell_type"].values) for c in connectivities])
+```
+
+```{python}
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
+ax1.boxplot(dataset_lisi, labels=tools, vert=False)
+ax1.set_title("dataset")
+ax1.set_xlabel("LISI(dataset)")
+ax2.boxplot(ct_lisi, labels=tools, vert=False)
+ax2.set_title("cell type")
+ax2.set_xlabel("LISI(cell type)")
+```
+
+```{python}
+
+```

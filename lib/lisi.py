@@ -40,7 +40,6 @@ def lisi_connectivities(adata, n_neighbors=30, type="gaussian"):
         adjacency matrix
 
     """
-    print("Computing connectivities using `sc.pp.neighbors`.")
     if type == 'gaussian':
         tmp_adata = sc.pp.neighbors(adata, n_neighbors=n_neighbors, knn=False, method='gauss', copy=True)
         return tmp_adata.uns['neighbors']['connectivities']

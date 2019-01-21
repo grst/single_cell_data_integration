@@ -1,0 +1,225 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.7
+---
+
+## Evaluate LISI
+
+```{python}
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+from jupytertools import fix_logging
+setwd()
+fix_logging()
+import scanpy.api as sc
+import pandas as pd
+import numpy as np
+from lisi import lisi_connectivities, lisi
+import matplotlib.pyplot as plt
+from time import time
+import bbknn
+from math import floor
+from os.path import abspath
+sc.settings.figdir = "."
+sc.settings.plot_suffix
+```
+
+## Maximum LISI achieved, depending on size of Neighborhood
+
+```{python}
+X = np.random.rand(2000, 10000)
+X[:1000, :5000] += 0
+X[1000:2000, 5000:] += 10
+# X[1000:1500, 5000:] += 20
+# X[1500:2000, 5000:] += 30
+```
+
+```{python}
+no_mixture = ["A"] * 1000 + ["B"] * 1000
+perfect_mixture = ["A", "B"] * 1000
+batch = (["batch0"] * 500 + ["batch1"] * 500) * 2
+```
+
+```{python}
+adata = sc.AnnData(X=X)
+adata.obs["no_mixture"] = no_mixture
+adata.obs["perfect_mixture"] = perfect_mixture
+adata.obs["batch"] = batch
+```
+
+```{python}
+sc.pp.pca(adata)
+```
+
+```{python}
+sc.pp.neighbors(adata)
+sc.tl.umap(adata)
+adata.uns["batch_colors"] = np.array(["#bcbd22", "#e377c2"])
+```
+
+```{python}
+fig, axs = plt.subplots(1, 3, figsize=(14, 3))
+for color, ax in zip(["no_mixture", "perfect_mixture", "batch"], axs):
+    sc.pl.umap(adata, color=color, ax=ax, show=False)
+fig.subplots_adjust(wspace=.4)
+
+fig.savefig("results/supplementary_notebooks/lisi_simulation.png", quality=100, dpi=300)
+```
+
+# 
+
+
+
+### Original method: use gaussian kernel for soft neighborhood
+
+```{python}
+neighbors = [5, 10, 20, 30, 50, 100, 150, 200, 250, 300]
+connectivities = []
+elapsed_time = []
+N=5
+for n in neighbors:
+    print("n= {}".format(n))
+    before = time()
+    for i in range(N):
+        c = lisi_connectivities(adata, n_neighbors=n)
+        if not i:
+            connectivities.append(c)
+    after = time()
+    elapsed_time.append((after - before) / N)
+```
+
+```{python}
+lisis = dict()
+times = dict()
+```
+
+```{python}
+times["gaussian"] = elapsed_time
+lisis["gaussian"] = {
+    "no_mixture": [lisi(c, no_mixture) for c in connectivities],
+    "perfect_mixture": [lisi(c, perfect_mixture) for c in connectivities]
+}
+```
+
+### Scanpy method: use umap kernel with fixed neighborhood (for compatibility with bbknn)
+
+```{python}
+connectivities = []
+elapsed_time = []
+for n in neighbors:
+    print("n= {}".format(n))
+    before = time()
+    for i in range(N):
+        c = lisi_connectivities(adata, n_neighbors=n, type="fixed")
+        if not i:
+            connectivities.append(c)
+    after = time()
+    elapsed_time.append((after - before) / N)
+```
+
+```{python}
+times["fixed"] = elapsed_time
+lisis["fixed"] = {
+    "no_mixture": [lisi(c, no_mixture) for c in connectivities],
+    "perfect_mixture": [lisi(c, perfect_mixture) for c in connectivities]
+}
+```
+
+### BBKNN with fixed neighborhood
+
+```{python}
+connectivities = []
+elapsed_time = []
+for n in neighbors:
+    print("n= {}".format(n))
+    before = time()
+    for i in range(N):
+        bbknn.bbknn(adata, neighbors_within_batch=floor(n/2), batch_key="batch")
+        c = adata.uns["neighbors"]["connectivities"].toarray()
+        if not i:
+            connectivities.append(c)
+    after = time()
+    elapsed_time.append((after - before) / N)
+```
+
+```{python}
+times["bbknn"] = elapsed_time
+lisis["bbknn"] = {
+    "no_mixture": [lisi(c, no_mixture) for c in connectivities],
+    "perfect_mixture": [lisi(c, perfect_mixture) for c in connectivities]
+}
+```
+
+```{python}
+fig, ax = plt.subplots(3, 3, figsize=(14, 12), sharex=False, sharey="row")
+ax[0, 0].boxplot(lisis["gaussian"]["perfect_mixture"], labels=neighbors, vert=True)
+ax[0, 0].set_title("Gaussian Kernel")
+ax[0, 0].set_xlabel("kernel width (neighbors)")
+ax[0, 0].set_ylabel("LISI (perfect mixture)")
+ax[0, 1].boxplot(lisis["fixed"]["perfect_mixture"], labels=neighbors, vert=True)
+ax[0, 1].set_title("Fixed Neighborhood")
+ax[0, 1].set_xlabel("n neighbors")
+ax[0, 2].boxplot(lisis["bbknn"]["perfect_mixture"], labels=[floor(n/2) for n in neighbors], vert=True)
+ax[0, 2].set_title("Fixed Neighborhood (BBKNN)")
+ax[0, 2].set_xlabel("neighbors per batch")
+
+ax[1, 0].boxplot(lisis["gaussian"]["no_mixture"], labels=neighbors, vert=True)
+ax[1, 0].set_title("Gaussian Kernel")
+ax[1, 0].set_xlabel("kernel width (neighbors)")
+ax[1, 0].set_ylabel("LISI (no mixture)")
+ax[1, 0].set_ylim(0.95, 2.05)
+ax[1, 1].boxplot(lisis["fixed"]["no_mixture"], labels=neighbors, vert=True)
+ax[1, 1].set_title("Fixed Neighborhood")
+ax[1, 1].set_xlabel("neighbors")
+ax[1, 2].boxplot(lisis["bbknn"]["no_mixture"], labels=[floor(n/2) for n in neighbors], vert=True)
+ax[1, 2].set_title("Fixed Neighborhood (BBKNN, 2 batches)")
+ax[1, 2].set_xlabel("neighbors per batch")
+
+# ax[2, 0].scatter(x=neighbors, y=times["gaussian"], s=5, c='blue')
+ax[2, 0].plot(neighbors, times["gaussian"], '-o')
+ax[2, 0].set_title("Gaussian Kernel")
+ax[2, 0].set_xlabel("kernel width (neighbors)")
+ax[2, 0].set_ylabel("mean time [seconds, n=5]")
+ax[2, 1].plot(neighbors, times["fixed"], '-o')
+ax[2, 1].set_title("Fixed Neighborhood")
+ax[2, 1].set_xlabel("neighbors")
+ax[2, 2].plot([floor(n/2) for n in neighbors], times["bbknn"], '-o')
+ax[2, 2].set_title("Fixed Neighborhood (BBKNN, 2 batches)")
+ax[2, 2].set_xlabel("neighbors per batch")
+
+# ax[1, 0].set_ylim(0.95, 2.05)
+# ax[1, 1].boxplot(lisis["fixed"]["no_mixture"], labels=neighbors, vert=True)
+# ax[1, 1].set_title("Fixed Neighborhood")
+# ax[1, 1].set_xlabel("n neighbors")
+# ax[1, 2].boxplot(lisis["bbknn"]["no_mixture"], labels=neighbors, vert=True)
+# ax[1, 2].set_title("Fixed Neighborhood (BBKNN)")
+# ax[1, 2].set_xlabel("n neighbors")
+
+fig.subplots_adjust(hspace=.4, wspace=.1)
+
+fig.savefig("results/supplementary_notebooks/lisi_comparison.jpg", quality=100, dpi=300)
+```
+
+```{python}
+
+```

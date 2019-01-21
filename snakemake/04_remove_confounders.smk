@@ -17,7 +17,15 @@ INTEGRATION_TOOLS_RAW = [
   "schelker"
 ]
 # tools that operate on the processed, scaled data or on embeddings (e.g. PCA)
-INTEGRATION_TOOLS_PROCESSED = ["harmony", "scanorama", "bbknn"]
+INTEGRATION_TOOLS_PROCESSED = ["harmony", "scanorama", "bbknn", "harmony-patient", "bbknn-patient"]
+
+
+rule compare_batch_effect_tools:
+  """
+  Compare the integration results of all tools
+  """
+  input:
+    "results/data_integrated/compare_tools/comparison.html"
 
 
 rule remove_confounders:
@@ -51,6 +59,27 @@ rule annotate_cell_types:
   """
   input:
     "results/data_integrated/cell_types/cell_types.tsv"
+
+
+rule _compare_tools:
+  """
+  Execute the notebook that compares batch effect removal tools
+  """
+  input:
+    expand("results/data_integrated/batch_effects_removed/{tool}/adata.h5ad",
+              tool=INTEGRATION_TOOLS_RAW+INTEGRATION_TOOLS_PROCESSED),
+    "results/data_integrated/cell_types/cell_types.tsv",
+    notebook="pipeline_stages/04_remove_confounders/compare_tools.Rmd"
+  output:
+    report="results/data_integrated/compare_tools/comparison.html"
+  conda:
+    "../envs/compare_batch_effect_removal_tools.yml"
+  threads: 16
+  params:
+    root_dir=ROOT,
+    nb_params = dict()
+  wrapper:
+    "file:snakemake/wrappers/render_rmarkdown"
 
 
 # This is to work around the issue that snakemake does not

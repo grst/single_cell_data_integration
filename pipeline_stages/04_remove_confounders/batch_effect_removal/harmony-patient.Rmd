@@ -1,7 +1,7 @@
 ---
 params:
-  input_file: NULL
-  output_file: NULL
+  input_file: results/data_merged/adata.h5ad
+  output_file: /storage/scratch/harmony.h5ad
 jupyter:
   jupytext:
     text_representation:
@@ -10,9 +10,9 @@ jupyter:
       format_version: '1.0'
       jupytext_version: 0.8.5
   kernelspec:
-    display_name: Python 3
+    display_name: single_cell_integration
     language: python
-    name: python3
+    name: single_cell_integration
   language_info:
     codemirror_mode:
       name: ipython
@@ -22,8 +22,11 @@ jupyter:
     name: python
     nbconvert_exporter: python
     pygments_lexer: ipython3
-    version: 3.6.7
+    version: 3.6.6
 ---
+
+
+
 
 ```{python}
 # %load_ext autoreload
@@ -41,9 +44,17 @@ setwd()
 fix_logging()
 ```
 
+```{r}
+library(harmony)
+library(magrittr)
+library(reticulate)
+```
+
 ```{python}
-INPUT_FILE = r.params['input_file']
-OUT_FILE = r.params['output_file']
+# work around reticulate not maintaining the python path
+setwd()
+INPUT_FILE = os.path.abspath(r.params['input_file'])
+OUT_FILE = os.path.abspath(r.params['output_file'])
 ```
 
 ```{python}
@@ -55,20 +66,21 @@ sc.tl.pca(adata, svd_solver='arpack')
 ```
 
 ```{python}
-sc.pl.pca_variance_ratio(adata, log=True, n_pcs=50)
+adata.obs["batch_patient"] = [dataset + "_" + patient for dataset, patient in zip(adata.obs["dataset"], adata.obs["patient"])]
+batch_vector = adata.obs["batch_patient"].values.tolist()
+pca_mat = np.matrix(adata.obsm["X_pca"])
+```
+
+```{r run-harmony}
+harmony_embeddings = HarmonyMatrix(py$pca_mat, py$batch_vector)
 ```
 
 ```{python}
-# adata.obs["batch"] = [dataset + "_" + patient for dataset, patient in zip(adata.obs["dataset"], adata.obs["patient"])]
-pass
+adata.obsm["X_harmony"] = r.harmony_embeddings
 ```
 
-```{python bbknn}
-sc.pp.bbknn(adata, batch_key='dataset', approx=True,
-            neighbors_within_batch=3, n_pcs=50)
-```
-
-```{python umap}
+```{python}
+sc.pp.neighbors(adata, n_neighbors=10, use_rep="X_harmony")
 sc.tl.umap(adata)
 ```
 

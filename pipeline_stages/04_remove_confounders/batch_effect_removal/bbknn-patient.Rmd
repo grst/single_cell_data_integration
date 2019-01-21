@@ -35,7 +35,6 @@ import sys
 sys.path.append("lib")
 from jupytertools import setwd, fix_logging
 from scio import concatenate
-import scanorama
 import os.path
 import gc
 setwd()
@@ -48,51 +47,30 @@ OUT_FILE = r.params['output_file']
 ```
 
 ```{python}
-adata_merged = sc.read(INPUT_FILE)
+adata = sc.read(INPUT_FILE)
 ```
 
 ```{python}
-# sc.pp.subsample(adata_merged, n_obs=6000)
-pass
+sc.tl.pca(adata, svd_solver='arpack')
 ```
 
 ```{python}
-datasets = [x for x in np.unique(adata_merged.obs["dataset"].values)]
+sc.pl.pca_variance_ratio(adata, log=True, n_pcs=50)
 ```
 
 ```{python}
-assert adata_merged.obs_names.is_unique
+adata.obs["batch_patient"] = [dataset + "_" + patient for dataset, patient in zip(adata.obs["dataset"], adata.obs["patient"])]
 ```
 
-```{python}
-adatas = [adata_merged[adata_merged.obs["dataset"].values == dataset,:].copy() for dataset in datasets]
-```
-
-```{python run_scanorama}
-integrated, corrected = scanorama.correct_scanpy(adatas, return_dimred=True, batch_size=50000)
-```
-
-```{python}
-adata_corrected = concatenate(corrected, index_unique=None)
-```
-
-```{python}
-adata_corrected.obsm["X_scanorama"] = np.vstack(integrated)
-```
-
-```{python}
-# bring elements in right order
-adata_corrected = adata_corrected[adata_merged.obs_names.values, :].copy()
-```
-
-```{python neighbors}
-sc.pp.neighbors(adata_corrected, n_neighbors=10, use_rep="X_scanorama")
+```{python bbknn}
+sc.pp.bbknn(adata, batch_key='batch_patient', approx=True,
+            neighbors_within_batch=3, n_pcs=50)
 ```
 
 ```{python umap}
-sc.tl.umap(adata_corrected)
+sc.tl.umap(adata)
 ```
 
-```{python store_output}
-adata_corrected.write(OUT_FILE)
+```{python}
+adata.write(OUT_FILE)
 ```

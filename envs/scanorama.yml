@@ -23,4 +23,5 @@ dependencies:
   - statsmodels=0.8.0
   - pip:
     - fbpca==1.0
+    - scanorama==1.0
 

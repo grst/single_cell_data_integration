@@ -62,4 +62,5 @@ colors["batch_patient"] = {'azizi_peer_2018_10x_BC09': '#FFFF00',
  'zheng_zhang_2017_P0322': '#300018',
  'zheng_zhang_2017_P0407': '#0AA6D8',
  'zheng_zhang_2017_P0508': '#013349',
- 'zheng_zhang_2017_P1116': '#00846F'}
+ 'zheng_zhang_2017_P1116': '#00846F',
+ 'zheng_zhang_2017_P1202t': '#372101'}

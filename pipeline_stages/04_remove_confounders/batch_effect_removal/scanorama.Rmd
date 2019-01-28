@@ -52,6 +52,11 @@ adata_merged = sc.read(INPUT_FILE)
 ```
 
 ```{python}
+# only use highly-variable genes. 
+adata_merged = adata_merged[:, adata_merged.var["highly_variable"]].copy()
+```
+
+```{python}
 # sc.pp.subsample(adata_merged, n_obs=6000)
 pass
 ```
@@ -65,7 +70,7 @@ assert adata_merged.obs_names.is_unique
 ```
 
 ```{python}
-adatas = [adata_merged[adata_merged.obs["dataset"].values == dataset,:].copy() for dataset in datasets]
+adatas = [adata_merged[adata_merged.obs["dataset"].values == dataset, :].copy() for dataset in datasets]
 ```
 
 ```{python run_scanorama}

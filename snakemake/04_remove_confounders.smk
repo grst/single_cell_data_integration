@@ -20,14 +20,6 @@ INTEGRATION_TOOLS_RAW = [
 INTEGRATION_TOOLS_PROCESSED = ["harmony", "scanorama", "bbknn", "harmony-patient", "bbknn-patient"]
 
 
-rule compare_batch_effect_tools:
-  """
-  Compare the integration results of all tools
-  """
-  input:
-    "results/data_integrated/compare_tools/comparison.html"
-
-
 rule remove_confounders:
   """
   Remove confounders (batch effects, cell cycle, number of genes etc.
@@ -39,7 +31,8 @@ rule remove_confounders:
     expand("results/data_integrated/batch_effects_removed/{tool}/adata.h5ad", tool=INTEGRATION_TOOLS_RAW +
       INTEGRATION_TOOLS_PROCESSED),
     expand("results/data_integrated/batch_effects_removed/{tool}/visualize_results.html", tool=INTEGRATION_TOOLS_RAW +
-      INTEGRATION_TOOLS_PROCESSED)
+      INTEGRATION_TOOLS_PROCESSED),
+    "results/data_integrated/compare_tools/comparison.html"
 
 rule clean:
   """

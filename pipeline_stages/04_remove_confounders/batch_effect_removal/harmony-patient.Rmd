@@ -62,7 +62,8 @@ adata = sc.read(INPUT_FILE)
 ```
 
 ```{python}
-sc.tl.pca(adata, svd_solver='arpack')
+# automatically uses highly-variable genes only
+sc.tl.pca(adata, svd_solver='arpack', use_highly_variable=True)
 ```
 
 ```{python}

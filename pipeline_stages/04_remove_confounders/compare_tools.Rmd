@@ -129,7 +129,7 @@ pass
 
 ```{python}
 def plot_umap(adata, ax, title="umap", size=0.01, rep="X_umap", color="dataset"):
-    assert len(np.unique(adata.obs[color].values)) == len(colors[color]), \
+    assert np.all([x in colors[color] for x in np.unique(adata.obs[color].values)]), \
         "the color map contains a color for each distinct value"
     color_vec = [colors[color][x] for x in adata.obs[color].values]
     ax.scatter(adata.obsm[rep][:, 0], adata.obsm[rep][:, 1], s=size,
@@ -161,7 +161,7 @@ for tool, ax in zip(tools, axs.flatten()):
 fig.legend(**make_legend_elements("dataset"), loc='upper left', bbox_to_anchor=(0.725, 0.45), ncol=1, title="dataset")
 fig.delaxes(axs[1, 3])
 fig.subplots_adjust(hspace=.4)
-fig.savefig("results/data_integrated/compare_tools/umap_dataset.jpg", quality=100, dpi=300)
+fig.savefig("results/data_integrated/compare_tools/umap_dataset.png", quality=100, dpi=300)
 ```
 
 ```{python}
@@ -172,7 +172,7 @@ for tool, ax in zip(tools, axs.flatten()):
 fig.legend(**make_legend_elements("cell_type"), loc='upper left', bbox_to_anchor=(0.74, 0.45), ncol=1, title="cell type")
 fig.delaxes(axs[1, 3])
 fig.subplots_adjust(hspace=.4)
-fig.savefig("results/data_integrated/compare_tools/umap_cell_type.jpg", quality=100, dpi=300)
+fig.savefig("results/data_integrated/compare_tools/umap_cell_type.png", quality=100, dpi=300)
 ```
 
 ```{python}
@@ -182,11 +182,11 @@ for tool, ax in zip(tools, axs.flatten()):
 
 fig.delaxes(axs[1, 3])
 fig.subplots_adjust(hspace=.4)
-fig.savefig("results/data_integrated/compare_tools/umap_patient.jpg", quality=100, dpi=300)
+fig.savefig("results/data_integrated/compare_tools/umap_patient.png", quality=100, dpi=300)
 ```
 
 ```{python}
-def get_connectivities(adata, tool, neighbors_total, neighbors_patient, neighbors_dataset):
+def get_connectivities(tool, neighbors_total, neighbors_patient, neighbors_dataset):
     if tool == "BBKNN":
         bbknn(adata, batch_key="dataset", neighbors_within_batch=neighbors_dataset)
         return adata.uns["neighbors"]["connectivities"].toarray()
@@ -213,12 +213,12 @@ len(colors["batch_patient"]), len(colors["dataset"])
 ```
 
 ```{python}
-p=Pool(8)
+p=Pool(2)
 ```
 
 ```{python}
 connectivities = p.starmap(get_connectivities,
-                           [(adata, t, 152, 4, 19) for t in tools])
+                           [(t, 152, 4, 19) for t in tools])
 ```
 
 ```{python}
@@ -238,7 +238,7 @@ ax2.set_xlabel("LISI (dataset)")
 ax3.boxplot(patient_lisi, labels=tools, vert=False)
 ax3.set_title("patient (n={})".format(len(colors["batch_patient"])))
 ax3.set_xlabel("LISI (patient)")
-fig.savefig("results/data_integrated/compare_tools/lisi_boxplot.jpg", quality=100, dpi=300)
+fig.savefig("results/data_integrated/compare_tools/lisi_boxplot.png", quality=100, dpi=300)
 fig.savefig("results/data_integrated/compare_tools/lisi_boxplot.pdf")
 ```
 

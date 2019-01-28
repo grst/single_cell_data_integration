@@ -61,6 +61,7 @@ ADATA_SCALED = r.params["adata_scaled"]
 ```{python}
 adata_raw = sc.read_h5ad(ADATA_RAW)
 adata = sc.read_h5ad(ADATA_SCALED)
+adata = adata[:, adata.var["highly_variable"]].copy()
 adata.raw = adata_raw
 ```
 

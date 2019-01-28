@@ -110,7 +110,8 @@ assert tmp_x.shape == adata.X.shape
 ```
 
 ```{python tocsr}
-adata.X = tmp_x.tocsr()
+# convert to float64 due to floating point errors in `highly_variable_genes`. 
+adata.X = tmp_x.tocsr().astype(np.float64)
 ```
 
 ### preview umap
@@ -120,8 +121,7 @@ UMAP = True
 if UMAP:
     adata_umap = adata.copy()
     sc.pp.filter_genes(adata_umap, min_cells=1)
-    filter_result = sc.pp.filter_genes_dispersion(adata_umap.X, flavor="seurat", min_mean=0.0125, max_mean=3, min_disp=0.5)
-    adata_umap = adata_umap[:, filter_result.gene_subset]
+    filter_result = sc.pp.highly_variable_genes(adata_umap, flavor="seurat", min_mean=0.0125, max_mean=3, min_disp=0.5)
 ```
 
 ```{python run-umap}

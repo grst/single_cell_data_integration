@@ -103,7 +103,7 @@ rule _integrate_raw:
     report=_integrate_raw_out['report']
   wildcard_constraints:
     tool="|".join(INTEGRATION_TOOLS_RAW)
-  threads: 8
+  threads: 32   # needed to switch to float64 matrix, needs a lot of memory now.
   conda:
     "../envs/{tool}.yml"
   params:

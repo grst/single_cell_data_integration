@@ -10,14 +10,13 @@ def inverse_simpson_index(probs):
     return 1/np.sum(np.array([x**2 for x in probs]))
 
 
-@jit(nopython=True)
 def _lisi(i, connectivities, annot_vec, levels):
     """Compute the locally inversed Simpson Index"""
     weights = connectivities[i, :]/np.sum(connectivities[i, :])
     probabs = []
     for batch in levels:
         mask = annot_vec == batch
-        probabs.append(np.sum(weights[mask]))
+        probabs.append(np.sum(weights[0, mask]))
     return inverse_simpson_index(probabs)
 
 
@@ -54,7 +53,7 @@ def lisi(connectivities, labels):
     Compute the locally inversed Simpson Index (Harmony paper)
 
     Parameters:
-        connectivities : np.array
+        connectivities : sparse CSR matrix
             adjacency matrix computed with `lisi_connectivities` or `sc.pp.neighbors`.
         labels : np.array
             numpy array containing a label for each cell.

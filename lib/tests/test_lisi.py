@@ -26,8 +26,8 @@ def test_lisi_gaussian():
 
     connectivities = lisi_connectivities(adata)
 
-    lisi_no_mixture = lisi(connectivities, no_mixture)
-    lisi_perfect_mixture = lisi(connectivities, perfect_mixture)
+    lisi_no_mixture = lisi(connectivities, no_mixture, n_jobs=8)
+    lisi_perfect_mixture = lisi(connectivities, perfect_mixture, n_jobs=8)
 
     assert np.median(lisi_no_mixture) == pytest.approx(1, 0.01)
     assert np.median(lisi_perfect_mixture) == pytest.approx(2, 0.01)
@@ -46,10 +46,10 @@ def test_lisi_fixed():
 
     connectivities = lisi_connectivities(adata, n_neighbors=100, type="fixed")
 
-    lisi_no_mixture = lisi(connectivities, no_mixture)
-    lisi_perfect_mixture = lisi(connectivities, perfect_mixture)
+    lisi_no_mixture = lisi(connectivities, no_mixture, n_jobs=8)
+    lisi_perfect_mixture = lisi(connectivities, perfect_mixture, n_jobs=8)
 
     assert np.median(lisi_no_mixture) == pytest.approx(1, 0.01)
     # with the fixed width (depending on the size of the fixed neighborhood)
-    # slightly smaller values than two are normal. 
+    # slightly smaller values than two are normal.
     assert np.median(lisi_perfect_mixture) == pytest.approx(2, 0.05)

@@ -2,6 +2,8 @@ import numpy as np
 from numba import jit
 import scanpy.api as sc
 import pandas as pd
+import scipy
+from multiprocessing import Pool
 
 
 @jit(nopython=True)
@@ -16,7 +18,8 @@ def _lisi(i, connectivities, annot_vec, levels):
     probabs = []
     for batch in levels:
         mask = annot_vec == batch
-        probabs.append(np.sum(weights[0, mask]))
+        w = weights[0, mask] if scipy.sparse.issparse(weights) else weights[mask]
+        probabs.append(np.sum(w))
     return inverse_simpson_index(probabs)
 
 
@@ -45,10 +48,10 @@ def lisi_connectivities(adata, n_neighbors=30, type="gaussian"):
 
     else:
         tmp_adata = sc.pp.neighbors(adata, n_neighbors=n_neighbors, copy=True)
-        return tmp_adata.uns['neighbors']['connectivities'].toarray()
+        return tmp_adata.uns['neighbors']['connectivities']
 
 
-def lisi(connectivities, labels):
+def lisi(connectivities, labels, n_jobs=None):
     """
     Compute the locally inversed Simpson Index (Harmony paper)
 
@@ -58,7 +61,10 @@ def lisi(connectivities, labels):
         labels : np.array
             numpy array containing a label for each cell.
     """
+    p = Pool(n_jobs)
     annot_vec = pd.Series(labels, dtype="category").cat.codes.values
     levels = np.unique(annot_vec)
-    return np.array([_lisi(i, connectivities, annot_vec, levels)
-                     for i in range(len(labels))])
+    return np.array(
+        p.starmap(_lisi, [(i, connectivities, annot_vec, levels)
+                          for i in range(len(labels))], chunksize=500)
+    )

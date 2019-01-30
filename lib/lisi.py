@@ -1,25 +1,28 @@
 import numpy as np
-from numba import jit
 import scanpy.api as sc
 import pandas as pd
 import scipy
-from multiprocessing import Pool
+from sklearn.preprocessing import normalize
 
 
-@jit(nopython=True)
 def inverse_simpson_index(probs):
     """Compute the Inverse Simpson Index of an array or probabilities. """
-    return 1/np.sum(np.array([x**2 for x in probs]))
+    return 1/np.sum(np.power(probs, 2), axis=1)
 
 
-def _lisi(i, connectivities, annot_vec, levels):
-    """Compute the locally inversed Simpson Index"""
-    weights = connectivities[i, :]/np.sum(connectivities[i, :])
+def _lisi(connectivities, annot_vec, levels):
+    # divide each row by sum of the row.
+    is_sparse = scipy.sparse.issparse(connectivities)
+    weights = normalize(connectivities, norm='l1', axis=1)
+
     probabs = []
     for batch in levels:
         mask = annot_vec == batch
-        w = weights[0, mask] if scipy.sparse.issparse(weights) else weights[mask]
-        probabs.append(np.sum(w))
+        if is_sparse:
+            probabs.append(np.array(np.sum(weights[:, mask], axis=1)))
+        else:
+            probabs.append(np.sum(weights[:, mask], axis=1)[:, np.newaxis])
+    probabs = np.hstack(probabs)
     return inverse_simpson_index(probabs)
 
 
@@ -51,7 +54,7 @@ def lisi_connectivities(adata, n_neighbors=30, type="gaussian"):
         return tmp_adata.uns['neighbors']['connectivities']
 
 
-def lisi(connectivities, labels, n_jobs=None):
+def lisi(connectivities, labels):
     """
     Compute the locally inversed Simpson Index (Harmony paper)
 
@@ -61,10 +64,6 @@ def lisi(connectivities, labels, n_jobs=None):
         labels : np.array
             numpy array containing a label for each cell.
     """
-    p = Pool(n_jobs)
     annot_vec = pd.Series(labels, dtype="category").cat.codes.values
     levels = np.unique(annot_vec)
-    return np.array(
-        p.starmap(_lisi, [(i, connectivities, annot_vec, levels)
-                          for i in range(len(labels))], chunksize=500)
-    )
+    return _lisi(connectivities, annot_vec, levels)

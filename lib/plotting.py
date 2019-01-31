@@ -1,3 +1,7 @@
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+import numpy as np
+
 colors = dict()
 colors["dataset"] = {
     "azizi_peer_2018": '#1f77b4',
@@ -64,3 +68,27 @@ colors["batch_patient"] = {'azizi_peer_2018_10x_BC09': '#FFFF00',
  'zheng_zhang_2017_P0508': '#013349',
  'zheng_zhang_2017_P1116': '#00846F',
  'zheng_zhang_2017_P1202t': '#372101'}
+
+
+def make_legend_elements(color_key):
+    res = {
+        "handles" : [],
+        "labels": []
+    }
+    for label, color in colors[color_key].items():
+        res["handles"].append(Line2D([0], [0], marker='o', color='w', markerfacecolor=color, label=label, markersize=15))
+        res["labels"].append(label)
+    return res
+
+
+def plot_umap(adata, ax, title="umap", size=0.01, rep="X_umap", color="dataset"):
+    assert np.all([x in colors[color] for x in np.unique(adata.obs[color].values)]), \
+        "the color map contains a color for each distinct value"
+    color_vec = [colors[color][x] for x in adata.obs[color].values]
+    ax.scatter(adata.obsm[rep][:, 0], adata.obsm[rep][:, 1], s=size,
+            c=color_vec, marker='.')
+    ax.set_xlabel("UMAP1")
+    ax.set_xticks([])
+    ax.set_ylabel("UMAP2")
+    ax.set_yticks([])
+    ax.set_title(title)

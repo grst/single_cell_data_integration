@@ -58,7 +58,7 @@ obs.columns = [c.strip() for c in obs.columns]
 
 obs = obs.assign(origin = obs["sampleType"].apply(lambda x: origin_map[x[0]]))\
          .assign(cell_type = obs["sampleType"].apply(lambda x: cell_type_map[x[1:]]))\
-         .assign(tumor_type = "HCC")\
+         .assign(tumor_type = "LIHC")\
          .assign(replicate = 1)\
          .assign(platform = "smartseq2")\
          .rename({"Patient": "patient"}, axis="columns")

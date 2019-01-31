@@ -179,24 +179,32 @@ samples = np.unique(adata.obs["samples"])
 ```
 
 ```{python}
-if DOUBLET_THRES < 1:
-    for s in samples:
-        print("## working on sample {}".format(s))
-        mask = adata.obs["samples"] == s
+# if DOUBLET_THRES < 1:
+# show the results, no matter if data will actually be filtered
+vis_doublet_thres = 0.2 if DOUBLET_THRES == 1 else DOUBLET_THRES
+for s in samples:
+    print("## working on sample {}".format(s))
+    mask = adata.obs["samples"] == s
+    n_cells = np.sum(mask)
+    print("n_cells =", n_cells)
+    if n_cells >= 100: 
+        # fails for too few cells. 
         adata_sub = adata[mask, :].copy()
         scrub = scr.Scrublet(adata_sub.X)
         scores, doublets = scrub.scrub_doublets()
 
         # visualize
-        scrub.plot_histogram()
-        adata_sub.obs["is_doublet"] = scores > DOUBLET_THRES
+        f = scrub.plot_histogram()
+        plt.show()
+        colname = "is_doublet (T={})".format(vis_doublet_thres)
+        adata_sub.obs[colname] = scores > vis_doublet_thres
         sc.pp.normalize_per_cell(adata_sub, counts_per_cell_after=1e4)
         sc.pp.log1p(adata_sub)
         sc.pp.filter_genes(adata_sub, min_cells=1)
         sc.tl.pca(adata_sub)
         sc.pp.neighbors(adata_sub, n_neighbors=10, n_pcs=40)
         sc.tl.umap(adata_sub)
-        sc.pl.umap(adata_sub, color="is_doublet")
+        sc.pl.umap(adata_sub, color=colname)
 
         # store result in global adata
         adata.obs.loc[mask, "doublet_score"] = scores

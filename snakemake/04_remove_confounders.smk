@@ -67,7 +67,7 @@ rule _compare_tools:
     report="results/data_integrated/compare_tools/comparison.html"
   conda:
     "../envs/compare_batch_effect_removal_tools.yml"
-  threads: 16
+  threads: 32
   params:
     root_dir=ROOT,
     nb_params = dict()
@@ -248,7 +248,7 @@ rule _integrate_cleaned:
     report=_integrate_cleaned_out['report']
   wildcard_constraints:
     tool="|".join(INTEGRATION_TOOLS_PROCESSED)
-  threads: 8
+  threads: 16
   conda:
     "../envs/{tool}.yml"
   params:

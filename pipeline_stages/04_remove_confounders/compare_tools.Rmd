@@ -5,21 +5,11 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.0'
-      jupytext_version: 0.8.5
+      jupytext_version: 0.8.6
   kernelspec:
     display_name: Python 3
     language: python
     name: python3
-  language_info:
-    codemirror_mode:
-      name: ipython
-      version: 3
-    file_extension: .py
-    mimetype: text/x-python
-    name: python
-    nbconvert_exporter: python
-    pygments_lexer: ipython3
-    version: 3.6.7
 ---
 
 ```{python}
@@ -40,7 +30,7 @@ from bbknn import bbknn
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from multiprocessing import Pool
-from colors import colors
+from plotting import colors, make_legend_elements, plot_umap
 ```
 
 ## Load the different datasets
@@ -58,7 +48,7 @@ adata.obs["cell_type"] = cell_types["cell_type"].values
 ```
 
 ```{python}
-adata.obs["batch_patient"] = [dataset + "_" + patient for dataset, patient in zip(adata.obs["dataset"], adata.obs["patient"])]
+adata.obs["batch_patient"] = pd.Series([dataset + "_" + patient for dataset, patient in zip(adata.obs["dataset"], adata.obs["patient"])], dtype='category')
 ```
 
 ```{python}
@@ -122,35 +112,25 @@ embedding_keys = {t: k for t, k in zip(tools, ["X_pca", "X_pca_schelker", "X_har
 ```
 
 ```{python}
+adata.uns["tools"] = tools
+adata.uns["umap_keys"] = umap_keys
+adata.uns["embedding_keys"] = embedding_keys
+```
+
+```{python}
+adata.var.drop(["gene_ids-{}".format(i) for i in range(8)] + \
+               ["geneID-{}".format(i) for i in range(8)], 
+               errors='ignore', axis=1, inplace=True)
+```
+
+```{python}
+adata.write_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
+```
+
+```{python}
 # subsample for dev
 # sc.pp.subsample(adata, n_obs=6000)
 pass
-```
-
-```{python}
-def plot_umap(adata, ax, title="umap", size=0.01, rep="X_umap", color="dataset"):
-    assert np.all([x in colors[color] for x in np.unique(adata.obs[color].values)]), \
-        "the color map contains a color for each distinct value"
-    color_vec = [colors[color][x] for x in adata.obs[color].values]
-    ax.scatter(adata.obsm[rep][:, 0], adata.obsm[rep][:, 1], s=size,
-            c=color_vec, marker='.')
-    ax.set_xlabel("UMAP1")
-    ax.set_xticks([])
-    ax.set_ylabel("UMAP2")
-    ax.set_yticks([])
-    ax.set_title(title)
-```
-
-```{python}
-def make_legend_elements(color_key):
-    res = {
-        "handles" : [],
-        "labels": []
-    }
-    for label, color in colors[color_key].items():
-        res["handles"].append(Line2D([0], [0], marker='o', color='w', markerfacecolor=color, label=label, markersize=15))
-        res["labels"].append(label)
-    return res
 ```
 
 ```{python}
@@ -189,14 +169,14 @@ fig.savefig("results/data_integrated/compare_tools/umap_patient.png", quality=10
 def get_connectivities(tool, neighbors_total, neighbors_patient, neighbors_dataset):
     if tool == "BBKNN":
         bbknn(adata, batch_key="dataset", neighbors_within_batch=neighbors_dataset)
-        return adata.uns["neighbors"]["connectivities"].toarray()
+        return adata.uns["neighbors"]["connectivities"]
     elif tool == "BBKNN (patient)":
         bbknn(adata, batch_key="batch_patient", neighbors_within_batch=neighbors_patient)
-        return adata.uns["neighbors"]["connectivities"].toarray()
+        return adata.uns["neighbors"]["connectivities"]
     else: 
         rep = embedding_keys[tool]
         sc.pp.neighbors(adata, n_neighbors=neighbors_total, use_rep=rep)
-        return adata.uns["neighbors"]["connectivities"].toarray()
+        return adata.uns["neighbors"]["connectivities"]
             
 ```
 
@@ -213,18 +193,30 @@ len(colors["batch_patient"]), len(colors["dataset"])
 ```
 
 ```{python}
-p=Pool(2)
+p=Pool(4)
+connectivities = p.starmap(get_connectivities, [(t, 152, 4, 19) for t in tools])
+p.close()
 ```
 
 ```{python}
-connectivities = p.starmap(get_connectivities,
-                           [(t, 152, 4, 19) for t in tools])
+dataset_lisi = []
+for tool, conn in zip(tools, connectivities):
+    print("Working on dataset lisi for ", tool)
+    dataset_lisi.append(lisi(conn, adata.obs["dataset"].values))
 ```
 
 ```{python}
-dataset_lisi = p.starmap(lisi, [(c, adata.obs["dataset"].values) for c in connectivities])
-ct_lisi = p.starmap(lisi, [(c, adata.obs["cell_type"].values) for c in connectivities])
-patient_lisi = p.starmap(lisi, [(c, adata.obs["batch_patient"].values) for c in connectivities])
+ct_lisi = []
+for tool, conn in zip(tools, connectivities):
+    print("Working on cell_type lisi for ", tool)
+    ct_lisi.append(lisi(conn, adata.obs["cell_type"].values))
+```
+
+```{python}
+patient_lisi = []
+for tool, conn in zip(tools, connectivities):
+    print("Working on batch_patient lisi for ", tool)
+    patient_lisi.append(lisi(conn, adata.obs["batch_patient"].values))
 ```
 
 ```{python}
@@ -240,8 +232,4 @@ ax3.set_title("patient (n={})".format(len(colors["batch_patient"])))
 ax3.set_xlabel("LISI (patient)")
 fig.savefig("results/data_integrated/compare_tools/lisi_boxplot.png", quality=100, dpi=300)
 fig.savefig("results/data_integrated/compare_tools/lisi_boxplot.pdf")
-```
-
-```{python}
-
 ```

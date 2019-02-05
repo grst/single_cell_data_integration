@@ -1,0 +1,336 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+setwd()
+```
+
+```{python}
+adata = sc.read_h5ad("results/data_integrated/batch_effects_removed//harmony/adata.h5ad")
+```
+
+```{python}
+cell_types = pd.read_csv("results/data_integrated/cell_types/cell_types.tsv", sep="\t")
+adata.obs["cell_type"] = cell_types["cell_type"].values
+```
+
+```{python}
+mask_cell = adata.obs["cell_type"].isin(["T cell CD8+", "T cell CD4+", "T cell reg.", "NK cell"])
+mask_origin = adata.obs["origin"].isin(["tumor_primary", "tumor_edge"]).values 
+tdata = adata[mask_cell & mask_origin, :].copy()
+```
+
+```{python}
+tdata
+```
+
+```{python}
+tdata.obs_names = np.array(["cell_{}".format(i) for i in range(len(df.columns))])
+```
+
+```{python}
+df = pd.DataFrame.from_records(tdata.obsm["X_harmony"].T)
+df.shape
+```
+
+```{python}
+def marker_labels(adata, m1, m2=None, cutoff=0.5):
+    mask1 = adata.raw.var_names == m1
+    labels1 = adata.raw.X[:, mask1].toarray().flatten() >= cutoff
+    if m2 is not None:
+        mask2 = adata.raw.var_names == m2
+        labels2 = adata.raw.X[:, mask2].toarray().flatten() >= cutoff
+    labels = np.empty(labels1.shape, dtype=object)
+    labels[:] = "-"
+    labels[labels1] = "{}+".format(m1)
+    if m2 is not None:
+        labels[labels2] = "{}+".format(m2)
+        labels[labels2 & labels1] = "{}+/{}+".format(m1, m2)
+    return labels    
+```
+
+```{python}
+df.columns = tdata.obs_names
+```
+
+```{python}
+df.index = ["harmony_{}".format(i) for i in df.index]
+```
+
+```{python}
+df.to_csv("results/downstream_analysis/toomanycells/harmony.csv")
+```
+
+```{python}
+labels_df = pd.DataFrame().assign(item=df.columns,
+                                  label=marker_labels(tdata, "CD4", "CD8A"))
+```
+
+```{python}
+tdata.obs["labels"] = labels_df["label"].values
+```
+
+```{python}
+sc.pl.umap(tdata, color=["CD4", "CD8A", "labels"])
+```
+
+```{python}
+wd = "/storage/home/sturm/projects/sc_data_integration/pipeline/results/downstream_analysis/toomanycells/"
+```
+
+```{python}
+import getpass
+import os
+
+password = getpass.getpass()
+```
+
+```{python}
+def run_tmc(labels, label_name, input_mat="harmony.csv", prior="_prior"):
+    label_filename = "{}.csv".format(label_name)
+    labels_df = pd.DataFrame().assign(item=df.columns, label=labels)
+    labels_df.to_csv("results/downstream_analysis/toomanycells/" + label_filename, index=None)
+    !echo {password} | sudo -S docker run -v {wd}:/data:Z \
+            gregoryschwartz/too-many-cells:0.1.1.0 make-tree \
+                --matrix-path /data/{input_mat} \
+                --labels-file /data/{label_filename} \
+                --no-filter --normalization NoneNorm \
+                --draw-node-number \
+                --min-size=500 \
+                -o /data/out/{label_name} \
+                --prior /data/out/{prior} +RTS -N16 | grep -v "cell"
+```
+
+```{python}
+run_tmc(marker_labels(tdata, "NCR1", "NCAM1"), "nk_markers")
+```
+
+```{python}
+run_tmc(marker_labels(tdata, "CD3E", "KLRF1"), "cd3_klrf1")
+```
+
+```{python}
+run_tmc(marker_labels(tdata, "HAVCR2", "CD8A"), "tim3_cd8")
+```
+
+## load json and filter clusters (all CD8+ cells) 
+
+```{python}
+import json
+```
+
+```{python}
+with open("results/downstream_analysis/toomanycells/out/cell_type/cluster_list.json") as f:
+    cluster_list = json.load(f)
+```
+
+```{python}
+def select_clusters(cluster_list, selected_clusters):
+    selected_clusters = set(selected_clusters)
+    cells = {}
+    for cell in cluster_list:
+        cell_info = cell[0]
+        clusters = cell[1]
+        cell_id = cell_info['_barcode']['unCell']
+        cell_clusters = set(c['unCluster'] for c in clusters)
+        assert cell_id not in cells
+        cells[cell_id] = cell_clusters
+        
+    selected_cells = [
+        c for c, clusters in cells.items() if clusters & selected_clusters != set()
+    ]
+    
+    return selected_cells
+```
+
+```{python}
+selected_cells = select_clusters(cluster_list, [54, 28, 4])
+```
+
+```{python}
+len(selected_cells)
+```
+
+```{python}
+tdata2 = tdata[selected_cells, :].copy()
+```
+
+```{python}
+df2 = df.loc[:, selected_cells]
+df2.to_csv("results/downstream_analysis/toomanycells/harmony2.csv")
+```
+
+```{python}
+
+```
+
+```{python}
+tdata2
+```
+
+```{python}
+sc.pp.neighbors(tdata2, n_neighbors=10, use_rep="X_harmony")
+```
+
+```{python}
+sc.tl.umap(tdata2)
+```
+
+```{python}
+sc.pl.umap(tdata2, color=["CD8A", "HAVCR2", "GZMB", "FOXP3", "CD4", "cell_type", "dataset"])
+```
+
+```{python}
+sc.tl.diffmap(tdata2)
+sc.pp.neighbors(tdata2, n_neighbors=10, use_rep='X_diffmap')
+```
+
+```{python}
+sc.tl.draw_graph(tdata2)
+```
+
+```{python}
+sc.pl.umap(tdata2, color=["HAVCR2", "GZMB", "LAG3"])
+sc.pl.draw_graph(tdata2, color=["CD8A", "GZMB", "LAG3", "HAVCR2", "GZMK"], ncols=2)
+```
+
+```{python}
+sc.pl.draw_graph(tdata2, color=["FGFBP2", "CX3CR1", "FCGR3A", "S1PR5", "KLRF1"], ncols=2)
+```
+
+## split into two clusters using toomanycells
+
+```{python}
+# init prior for second-level analysis
+!echo {password} | sudo -S docker run -v {wd}:/data:Z \
+            gregoryschwartz/too-many-cells:0.1.1.0 make-tree \
+                --matrix-path /data/harmony2.csv \
+                --no-filter --normalization NoneNorm \
+                --draw-node-number \
+                --min-size=200 \
+                -o /data/out/prior2 +RTS -N16 | grep -v "cell"
+```
+
+```{python}
+def run_tmc2(labels, label_name, input_mat="harmony2.csv", prior="_prior2"):
+    label_name = label_name + "_2"
+    label_filename = "{}.csv".format(label_name)
+    labels_df = pd.DataFrame().assign(item=df2.columns, label=labels)
+    labels_df.to_csv("results/downstream_analysis/toomanycells/" + label_filename, index=None)
+    !echo {password} | sudo -S docker run -v {wd}:/data:Z \
+            gregoryschwartz/too-many-cells:0.1.1.0 make-tree \
+                --matrix-path /data/{input_mat} \
+                --labels-file /data/{label_filename} \
+                --no-filter --normalization NoneNorm \
+                --draw-node-number \
+                --min-size=500 \
+                -o /data/out/{label_name} \
+                --prior /data/out/{prior} +RTS -N16 | grep -v "cell"
+```
+
+```{python}
+run_tmc2(marker_labels(tdata2, "HAVCR2", "CD8A"), "tim3_cd8")
+```
+
+```{python}
+run_tmc2(marker_labels(tdata2, "PRF1", "GZMB"), "prf_gzmb")
+```
+
+```{python}
+with open("results/downstream_analysis/toomanycells/out/prf_gzmb_2/cluster_list.json") as f:
+    cluster_list = json.load(f)
+```
+
+```{python}
+cluster_label1 = [(cell, cluster) for cluster in [1, 32] for cell in select_clusters(cluster_list, [cluster])]
+cluster_label2 = [(cell, cluster) for cluster in [17, 3, 8, 33, 48] for cell in select_clusters(cluster_list, [cluster])]
+```
+
+```{python}
+tdata3 = tdata2[[cell for cell, _ in cluster_label1], :].copy()
+```
+
+```{python}
+tdata3.obs["cluster_label1"] = np.array([str(label) for _, label in cluster_label1])
+tdata3.obs["cluster_label2"] = np.array([str(label) for _, label in cluster_label2])
+```
+
+```{python}
+sc.pl.umap(tdata3, color=["cluster_label1", "cluster_label2"])
+```
+
+```{python}
+sc.tl.paga(tdata3, groups='cluster_label')
+sc.pl.paga(tdata3)
+```
+
+```{python}
+sc.tl.draw_graph(tdata3, init_pos='paga')
+sc.pl.draw_graph(tdata3, color='cluster_label', legend_loc='on data')
+```
+
+```{python}
+# %load_ext rpy2.ipython
+```
+
+```{python}
+# prepare R objects
+tmp_adata = sc.AnnData(X=tdata3.raw.X, obs=tdata3.obs, var=tdata3.raw.var)
+sc.pp.filter_genes(tmp_adata, min_cells=300)
+r_mat = np.expm1(tmp_adata.X.toarray()).T
+r_obs = pd.DataFrame().assign(
+    dataset = [_ for _ in tmp_adata.obs["dataset"].values],
+    n_genes = tmp_adata.obs["n_genes"].values,
+    percent_mito = tmp_adata.obs["percent_mito"].values,
+    cell_cycle_diff = tmp_adata.obs["cell_cycle_diff"].values, 
+    cluster_label1 = [_ for _ in tmp_adata.obs["cluster_label1"].values],
+    cluster_label2 = [_ for _ in tmp_adata.obs["cluster_label2"].values]
+)
+r_genes = pd.DataFrame().assign(gene_symbol=tmp_adata.var.index.values)
+```
+
+```{python}
+np.savetxt("results/downstream_analysis/edger/r_mat.csv", r_mat)
+r_obs.to_csv("results/downstream_analysis/edger/r_obs.csv")
+r_genes.to_csv("results/downstream_analysis/edger/r_genes.csv")
+```
+
+```{python}
+sc.tl.rank_genes_groups(tdata3, groupby="cluster_label1")
+```
+
+```{python}
+sc.pl.rank_genes_groups(tdata3)
+sc.pl.rank_genes_groups_dotplot(tdata3)
+```
+
+```{python}
+sc.tl.rank_genes_groups(tdata3, groupby="cluster_label2")
+```
+
+```{python}
+sc.pl.rank_genes_groups(tdata3)
+sc.pl.rank_genes_groups_dotplot(tdata3)
+```
+
+```{python}
+
+```

@@ -1,0 +1,22 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(reticulate)
+```
+
+```{python}
+import scanpy.api as sc
+adata = sc.read_h5ad("/storage/home/sturm/projects/sc_data_integration/pipeline/results/downstream_analysis/adata_annotated_integrated.h5ad")
+mask_cell = adata.obs["cell_type"].isin(["T cell CD8+", "T cell CD4+", "T cell reg.", "NK cell"])
+mask_origin = adata.obs["origin"].isin(["tumor_primary", "tumor_edge"]).values 
+tdata = adata[mask_cell & mask_origin, :].copy()
+```
+```{python}
+sc.pp.neighbors(tdata, use_rep="X_harmony")
+sc.tl.leiden(tdata)
+sc.tl.umap(adata=tdata)
+sc.pl.umap(tdata, color="leiden")
+```

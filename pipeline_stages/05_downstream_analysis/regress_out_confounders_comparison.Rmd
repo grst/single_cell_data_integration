@@ -1,0 +1,210 @@
+---
+params:
+  input_file: NULL
+  output_file: NULL
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    codemirror_mode:
+      name: ipython
+      version: 3
+    file_extension: .py
+    mimetype: text/x-python
+    name: python
+    nbconvert_exporter: python
+    pygments_lexer: ipython3
+    version: 3.6.7
+---
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import os
+import sys
+import gc
+sys.path.append("lib")
+from jupytertools import setwd, fix_logging
+from scio import concatenate
+from scpp import norm_log
+setwd()
+fix_logging()
+from plotting import plot_umap
+```
+
+```{python}
+biomart = pd.read_csv("tables/biomart.tsv", sep="\t")
+cell_cycle_regev = pd.read_csv("tables/cell_cycle_regev.tsv", sep="\t")
+cell_cycle_regev = cell_cycle_regev[["hgnc_symbol", "phase"]].drop_duplicates()
+```
+
+```{python load_adata, message=FALSE}
+dataset = "savas_loi_2018"
+#dataset = "lambrechts_2018_6653"
+adata = sc.read_h5ad("results/data_filtered/{}/adata.h5ad".format(dataset))
+# adata = sc.read_h5ad("results/data_filtered/lambrechts_2018_6653/adata.h5ad")
+sc.pp.subsample(adata, n_obs=6000)
+```
+
+## Normalize and scale
+
+The `raw` data object will contain normalized, log-transformed values for visualiation. 
+The original, raw (UMI) counts are stored in `adata.obsm["raw_counts"]`. 
+
+```{python}
+norm_log(adata)
+```
+
+## Detect highly variable genes.
+Most batch effect removal tools rely on the fact that data has been
+filtered for highly variable genes. We do this filtering here, on the merged data only,
+for the same reason we use the outer join above:
+
+In the datasets that only contain T cells, lineage specific markers (e.g. CD8A) would
+not be selected as highly variable and therefore discarded.
+
+```{python}
+sc.pp.highly_variable_genes(adata, flavor="seurat", min_mean=0.0125, max_mean=3, min_disp=0.5)
+```
+
+```{python}
+sc.pl.highly_variable_genes(adata)
+```
+
+```{python}
+print("Highly variable genes: ", np.sum(adata.var["highly_variable"]))
+print("Total genes:", adata.shape[1])
+```
+
+only keep highly variable genes and cell cycle genes (we need them later)
+Processing all genes in the 'regress-out' step is infeasible for computational reasons. 
+
+```{python}
+adata = adata[:, adata.var["highly_variable"] | adata.var_names.isin(cell_cycle_regev["hgnc_symbol"])].copy()
+```
+
+# visualize confounders
+
+```{python pca}
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
+```
+
+```{python}
+
+```
+
+```{python}
+sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "dataset", "patient", "origin", "platform"], ncols=2, show=False)
+plt.savefig("results/data_filtered/{}_ngenes_before.png".format(dataset), dpi=300)
+```
+
+```{python}
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "dataset", "patient", "origin", "platform"], ncols=2)
+```
+
+# Remove confounders
+
+```{python regress-out-cell-cycle}
+sc.pp.regress_out(adata, ["percent_mito", "n_counts"])
+sc.pp.scale(adata, max_value=10)
+```
+
+## Visualize confounders after removal
+
+```{python umap}
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
+```
+
+```{python}
+sc.pl.pca(adata, color=["n_genes", "n_counts", "percent_mito", "dataset", "patient", "origin", "platform"], ncols=2, show=False)
+plt.savefig("results/data_filtered/{}_ngenes_after.png".format(dataset), dpi=300)
+```
+
+```{python}
+sc.pl.umap(adata, color=["n_genes", "n_counts", "percent_mito", "dataset", "patient", "origin", "platform"], ncols=2)
+```
+
+## Determine cell cycle score
+
+```{python}
+sc.tl.score_genes_cell_cycle(adata,
+                             s_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "S","hgnc_symbol"].values,
+                             g2m_genes = cell_cycle_regev.loc[cell_cycle_regev["phase"] == "G2M","hgnc_symbol"].values)
+```
+
+```{python}
+sc.pl.umap(adata, color='phase')
+```
+
+sc.pl.umap(adata, %colors)
+
+```{python}
+adata.obs["cell_cycle_diff"] = adata.obs["S_score"] - adata.obs["G2M_score"]
+```
+
+### PCA before
+
+```{python}
+cc_genes = cell_cycle_regev.loc[cell_cycle_regev["hgnc_symbol"].isin(adata.var_names), "hgnc_symbol"]
+adata_cc_genes = adata[:, cc_genes]
+sc.tl.pca(adata_cc_genes, use_highly_variable=False)
+sc.pl.pca_scatter(adata_cc_genes, color=['phase', 'dataset', 'platform', 'n_genes'], ncols=2, show=False)
+plt.savefig("results/data_filtered/{}_cc_before.png".format(dataset), dpi=300)
+```
+```{python}
+sc.pp.regress_out(adata, ['cell_cycle_diff'])
+sc.pp.scale(adata, max_value=10)
+```
+
+### PCA after
+
+```{python}
+cc_genes = cell_cycle_regev.loc[cell_cycle_regev["hgnc_symbol"].isin(adata.var_names), "hgnc_symbol"]
+adata_cc_genes = adata[:, cc_genes]
+sc.tl.pca(adata_cc_genes, use_highly_variable=False)
+sc.pl.pca_scatter(adata_cc_genes, color=['phase', 'dataset', 'platform', 'n_genes'], ncols=2, show=False)
+plt.savefig("results/data_filtered/{}_cc_after.png".format(dataset), dpi=300)
+```
+
+## rerun pca and UMAP on full dataset
+
+
+we can now remove the cell cycle genes, too and keep only the highly variable genes for later. 
+
+```{python}
+adata = adata[:, adata.var["highly_variable"]]
+```
+
+```{python}
+sc.tl.pca(adata, svd_solver='arpack')
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.tl.umap(adata)
+```
+
+```{python}
+sc.pl.umap(adata, color='phase')
+```
+
+## Save results
+
+```{python}
+# adata.write(OUT_FILE, compression="lzf")
+```
+
+
+
+

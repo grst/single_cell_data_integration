@@ -1,0 +1,107 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+setwd()
+```
+
+```{python}
+adata = sc.read_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
+```
+
+```{python}
+mask_cell = adata.obs["cell_type"].isin(["T cell CD8+", "T cell CD4+", "T cell reg.", "NK cell"])
+mask_origin = adata.obs["origin"].isin(["tumor_primary", "tumor_edge"]).values 
+tdata = adata[mask_cell & mask_origin, :].copy()
+```
+
+```{python}
+sc.pp.neighbors(tdata, n_neighbors=10, use_rep="X_harmony")
+sc.tl.umap(tdata)
+```
+
+```{python}
+sc.tl.leiden(tdata, resolution=2)
+```
+
+```{python}
+sc.pl.umap(tdata, color=["CD4", "CD8A", "cell_type", "leiden"], ncols=2, legend_loc='on data')
+```
+
+```{python}
+exclude_clusters = [
+    22, 7, 30, # nk cells
+    25, 1, 17, # tregs
+    0, 27, 12, 16, 9, 13, 20, 8, 23, 33, 5, # cd4
+    43, 35, 28, 42, 38, 32, 41, 19,  37, 36, 27, 34, 40 # outliers
+]
+```
+
+```{python}
+sc.pl.umap(tdata[~tdata.obs["leiden"].values.isin([str(x) for x in exclude_clusters]), :],
+           color=["cell_type", "leiden", "CD8A", "CD4"], legend_loc="on data", ncols=2)
+```
+
+```{python}
+tdata2 = tdata[~tdata.obs["leiden"].values.isin([str(x) for x in exclude_clusters]), :].copy()
+```
+
+```{python}
+sc.pp.neighbors(tdata2, n_neighbors=10, use_rep="X_harmony")
+sc.tl.umap(tdata2)
+```
+
+```{python}
+sc.tl.leiden(tdata2, resolution=3)
+```
+
+```{python}
+sc.pl.umap(tdata2, color=["CD4", "CD8A", "cell_type", "leiden"], ncols=2, legend_loc='on data')
+```
+
+```{python}
+exclude_clusters2 = [
+    46, # outliers
+    6, 45, #nk cells
+    14, 3, 10, #cd 8 cells
+]
+```
+
+```{python}
+sc.pl.umap(tdata2[~tdata2.obs["leiden"].values.isin([str(x) for x in exclude_clusters2]), :],
+           color=["cell_type", "leiden", "CD8A", "CD4"], legend_loc="on data", ncols=2)
+```
+
+```{python}
+tdata3 = tdata2[~tdata2.obs["leiden"].values.isin([str(x) for x in exclude_clusters2]), :].copy()
+```
+
+```{python}
+tdata3.write_h5ad("results/downstream_analysis/adata_cd8.h5ad", compression="lzf")
+```
+
+```{python}
+tdata3
+```
+
+```{python}
+
+```

@@ -111,6 +111,8 @@ embedding_keys = {t: k for t, k in zip(tools, ["X_pca", "X_pca_schelker", "X_har
                                                None])}
 ```
 
+### write the adata object containing the complete information for downstream analysis
+
 ```{python}
 adata.uns["tools"] = tools
 adata.uns["umap_keys"] = umap_keys
@@ -132,6 +134,8 @@ adata.write_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
 # sc.pp.subsample(adata, n_obs=6000)
 pass
 ```
+
+### plots by confounders and cell types
 
 ```{python}
 fig, axs = plt.subplots(nrows=2, ncols=4, figsize=(14, 7))

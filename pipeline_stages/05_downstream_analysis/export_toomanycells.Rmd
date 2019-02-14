@@ -243,6 +243,10 @@ def run_tmc2(labels, label_name, input_mat="harmony2.csv", prior="_prior2"):
                 --draw-node-number \
                 --min-size=500 \
                 -o /data/out/{label_name} \
+                --draw-scale-saturation 2 \
+                --draw-colors "[\"#eaeaea\", \"#1b9e77\", \"#d95f02\", \"#7570b3\"]" \
+                --dendrogram-output dendrogram.pdf\
+                --draw-mark "MarkModularity" \
                 --prior /data/out/{prior} +RTS -N16 | grep -v "cell"
 ```
 
@@ -252,6 +256,14 @@ run_tmc2(marker_labels(tdata2, "HAVCR2", "CD8A"), "tim3_cd8")
 
 ```{python}
 run_tmc2(marker_labels(tdata2, "PRF1", "GZMB"), "prf_gzmb")
+```
+
+```{python}
+run_tmc2(marker_labels(tdata2, "GZMB", "GZMK", cutoff=1), "gzmb_gzmk")
+```
+
+```{python}
+run_tmc2(marker_labels(tdata2, "HAVCR2", "LAG3"), "tim3_lag3")
 ```
 
 ```{python}
@@ -274,21 +286,56 @@ tdata3.obs["cluster_label2"] = np.array([str(label) for _, label in cluster_labe
 ```
 
 ```{python}
-sc.pl.umap(tdata3, color=["cluster_label1", "cluster_label2"])
+sc.tl.leiden(tdata3, resolution=0.5)
 ```
 
 ```{python}
-sc.tl.paga(tdata3, groups='cluster_label')
+sc.pl.umap(tdata3, color=["cluster_label1", "cluster_label2", "leiden"])
+```
+
+```{python}
+
+```
+
+```{python}
+sc.tl.paga(tdata3, groups='cluster_label1')
 sc.pl.paga(tdata3)
 ```
 
 ```{python}
-sc.tl.draw_graph(tdata3, init_pos='paga')
-sc.pl.draw_graph(tdata3, color='cluster_label', legend_loc='on data')
+tdata3.uns['iroot'] = 4122
+sc.tl.dpt(tdata3)
 ```
 
 ```{python}
-# %load_ext rpy2.ipython
+sc.pl.draw_graph(tdata3, color=['dpt_pseudotime'])
+```
+
+```{python}
+sc.tl.draw_graph(tdata3, init_pos='paga')
+
+```
+
+```{python}
+sc.tl.umap(tdata3, init_pos='paga')
+```
+
+```{python}
+sc.pl.umap(tdata3, color=['cluster_label1', "GZMB", "GZMK", "LAG3", "HAVCR2", "PRF1",
+                                "GZMA", "LAYN", "PDCD1", "TIGIT", "KLRG1", 'ITGAE', "ENTPD1", "CX3CR1",
+                                "IL2", "IL10", "IFNG", "TNF", 'IL7R', "TCF7", "ZNF683"],
+                 legend_loc='on data', ncols=2)
+```
+
+```{python}
+# Guo 2018
+sc.pl.umap(tdata3, color=['tumor_type', 'ZNF683', 'HAVCR2', 'GZMK'], ncols=2)
+```
+
+```{python}
+# cell cycle
+sc.pl.umap(tdata3, color=['cluster_label1', "cluster_label2", "leiden", "ZNF683", "phase", "COL1A1", "CDCA5", "CDC6", "TK1", "leiden"],
+                 legend_loc='on data', ncols=2)
 ```
 
 ```{python}
@@ -314,12 +361,12 @@ r_genes.to_csv("results/downstream_analysis/edger/r_genes.csv")
 ```
 
 ```{python}
-sc.tl.rank_genes_groups(tdata3, groupby="cluster_label1")
+sc.tl.rank_genes_groups(tdata3, groupby="cluster_label1", method="wilcoxon")
 ```
 
 ```{python}
-sc.pl.rank_genes_groups(tdata3)
-sc.pl.rank_genes_groups_dotplot(tdata3)
+sc.pl.rank_genes_groups(tdata3, n_genes=40)
+sc.pl.rank_genes_groups_dotplot(tdata3, n_genes=30)
 ```
 
 ```{python}

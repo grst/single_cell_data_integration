@@ -1,0 +1,147 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+setwd()
+```
+
+```{python}
+adata = sc.read_h5ad("results/downstream_analysis/adata_cd8.h5ad")
+```
+
+### simplify graph using diffusion map 
+(https://scanpy-tutorials.readthedocs.io/en/latest/paga-paul15.html)
+
+```{python}
+sc.pp.neighbors(adata, n_neighbors=10, use_rep="X_harmony")
+sc.tl.diffmap(adata)
+sc.pp.neighbors(adata, n_neighbors=10, use_rep='X_diffmap')
+```
+
+## PAGA and draw-graph
+
+```{python}
+sc.tl.leiden(adata)
+sc.tl.paga(adata, groups="leiden")
+sc.pl.paga(adata)
+```
+
+```{python}
+sc.tl.draw_graph(adata, init_pos="paga")
+```
+
+```{python}
+sc.pl.draw_graph(adata, color="leiden", legend_loc="on data")
+```
+
+the default parameters of leidenalg result in way too many clusters and in a messy graph. 
+Perform parameter search on resolution
+
+```{python}
+resolutions = np.arange(0.005, 0.1, 0.005).tolist() + np.arange(0.1, 0.5, 0.05).tolist()
+```
+
+```{python}
+for r in resolutions:
+    sc.tl.leiden(adata, resolution=r, key_added="leiden_{}".format(r))
+```
+
+```{python}
+n_clusters = [np.unique(adata.obs["leiden_{}".format(r)].values).size for r in resolutions]    
+```
+
+```{python}
+for r, n in zip(resolutions, n_clusters):
+    print("{:.3f} {}".format(r, n))
+```
+
+```{python}
+plt.plot(resolutions, n_clusters)
+```
+
+```{python}
+sc.pl.draw_graph(adata, color=["leiden_{}".format(r) for r in resolutions if r <=0.3], legend_loc="on data", frameon=False)
+```
+
+There seems to be a plateau at ~11 clusters. Notably, below 9 clusters, the big cluster in the middle is not subdivided, which is arguably the most interesting part. Above 11 clusters, the outer clusters are subdivided in even smaller clusters which is arguably irrelevant for us. 
+We therefore choose a resolution of `0.09` for further analysis
+
+```{python}
+sc.tl.leiden(adata, resolution=0.09, key_added="clusters")
+```
+
+```{python}
+sc.pl.draw_graph(adata, color="clusters", legend_loc="on data")
+```
+
+```{python}
+Counter(adata.obs["clusters"].values)
+```
+
+We exclude clusters 9 and 10 as they have <500 cells. 
+
+```{python}
+adata2 = adata[~adata.obs["clusters"].isin(["9", "10"]), :].copy()
+adata.shape, adata2.shape
+```
+
+## re-run PAGA
+
+```{python}
+sc.tl.paga(adata2, groups="leiden_0.3")
+sc.pl.paga(adata2, threshold=0.05, color="clusters")
+```
+
+```{python}
+sc.tl.draw_graph(adata2, init_pos="paga")
+```
+
+```{python}
+sc.pl.draw_graph(adata2, color=["clusters", "HAVCR2", "GZMK", "GZMB", "ZNF683"], legend_loc="on data")
+```
+
+```{python}
+adata2.write_h5ad("results/downstream_analysis/adata_cd8_clusters.h5ad", compression="lzf")
+```
+
+```{python}
+adata3 = adata2[~adata2.obs["clusters"].isin(["5", "7", "8"]), :].copy()
+```
+
+```{python}
+adata3.shape, adata2.shape
+```
+
+```{python}
+adata3.uns['iroot'] = np.where(adata3.obs["clusters"] == "3")[0][0]
+```
+
+```{python}
+sc.tl.dpt(adata3)
+```
+
+```{python}
+sc.pl.draw_graph(adata3, color="dpt_pseudotime")
+```
+
+```{python}
+
+```

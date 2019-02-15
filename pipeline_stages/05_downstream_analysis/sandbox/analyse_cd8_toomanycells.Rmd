@@ -1,0 +1,227 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+import json
+setwd()
+import os
+from subprocess import run
+```
+
+```{python}
+adata = sc.read_h5ad("results/downstream_analysis/adata_cd8.h5ad")
+adata.obs_names = ["cell_{}".format(i) for i, _ in enumerate(adata.obs_names)]
+```
+
+```{python}
+sc.pp.neighbors(adata, n_neighbors=10, use_rep="X_harmony")
+sc.tl.diffmap(adata)
+sc.pp.neighbors(adata, n_neighbors=10, use_rep='X_diffmap')
+sc.tl.leiden(adata)
+sc.tl.paga(adata, groups="leiden")
+sc.pl.paga(adata, color="leiden", threshold=0.2, layout='fr', random_state=0)
+```
+
+```{python}
+sc.tl.umap(adata, init_pos='paga')
+sc.pl.umap(adata, color=["leiden"])
+```
+
+```{python}
+def marker_labels(adata, m1, m2=None, cutoff=0.5):
+    mask1 = adata.raw.var_names == m1
+    labels1 = adata.raw.X[:, mask1].toarray().flatten() >= cutoff
+    if m2 is not None:
+        mask2 = adata.raw.var_names == m2
+        labels2 = adata.raw.X[:, mask2].toarray().flatten() >= cutoff
+    labels = np.empty(labels1.shape, dtype=object)
+    labels[:] = "-"
+    labels[labels1] = "{}+".format(m1)
+    if m2 is not None:
+        labels[labels2] = "{}+".format(m2)
+        labels[labels2 & labels1] = "{}+/{}+".format(m1, m2)
+    return labels    
+```
+
+```{python}
+def export_adata_for_tmc(adata, filename):
+    df = pd.DataFrame.from_records(adata.obsm["X_harmony"].T)
+    df.columns = adata.obs_names
+    df.index = ["harmony_{}".format(i) for i in df.index]
+    df.shape
+    df.to_csv(filename)
+```
+
+```{python}
+def run_tmc(adata, root_pw, wd=".", prior=None, matrix_path="matrix.csv",
+            out_path="out", labels=None,
+            draw_node_number=True, min_size=500,
+            draw_scale_saturation=2, draw_modularity=True, 
+            n_jobs=16, dendrogram_output="dendrogram.pdf",
+            draw_colors=("#eaeaea", "#1b9e77", "#d95f02", "#7570b3")):
+    """
+    Run the too-many-cells docker container. 
+    
+    Args:
+        input_mat: path csv-matrix
+        root_pw: root password needed to run docker container. Use `getpass` python module. 
+        wd: working directory for too-many-cells
+        prior: prior directory, relative to working directory
+        out_path: output directory, relative to working directory. 
+        labels: numpy array/list containing cell labels. 
+        labels_filename: filename, relative to working directory where labels will be stored to load them into toomanycells. 
+    """
+    wd = os.path.abspath(wd)
+    mat_path = os.path.join(wd, matrix_path)
+    os.makedirs(os.path.join(wd, out_path), exist_ok=True)
+    if not os.path.isfile(mat_path):
+        export_adata_for_tmc(adata, os.path.join(wd, matrix_path))
+    if labels is not None:
+        labels_df = pd.DataFrame().assign(item=adata.obs_names, label=labels)
+        labels_df.to_csv(os.path.join(wd, out_path, "labels.csv"), index=None)
+    command = ["echo {} | sudo -S docker run -v {}:/data:Z gregoryschwartz/too-many-cells:0.1.1.0 make-tree".format(root_pw, wd)]
+    command.append("--matrix-path /data/" + matrix_path)
+    command.append("--no-filter")
+    command.append("--normalization NoneNorm")
+    command.append("-o /data/" + out_path)
+    if prior is not None:
+        command.append("--prior " + prior)
+    if draw_node_number:
+        command.append("--draw-node-number")
+    if labels is not None: 
+        command.append("--labels-file /data/{}/labels.csv".format(out_path))
+    command.append("--min-size {}".format(min_size))
+    command.append("--draw-scale-saturation {}".format(draw_scale_saturation))
+    command.append("--dendrogram-output " + dendrogram_output)
+    if draw_modularity:
+        command.append("--draw-mark 'MarkModularity'")
+    if draw_colors is not None:
+        color_string = ", ".join(['\\"{}\\"'.format(c) for c in draw_colors])
+        command.append("--draw-colors \"[{}]\"".format(color_string))
+    
+    # grep -v cell to suppress annoying dump of entire matrix
+    command.append(" +RTS -N{} | grep -v 'cell'".format(n_jobs))
+    # print("\n".join(command))
+    
+    !{" ".join(command)}
+```
+
+```{python}
+wd = "/storage/home/sturm/projects/sc_data_integration/pipeline/results/downstream_analysis/analyse_cd8_toomanycells/"
+matrix_path = "harmony.csv"
+```
+
+```{python}
+
+```
+
+```{python}
+import getpass
+password = getpass.getpass()
+```
+
+```{python}
+run_tmc(adata, password, wd=wd, prior=None, out_path="prior", labels=["cell" for _ in adata.obs_names])
+```
+
+## import clusters from TMC
+
+```{python}
+def select_clusters(cluster_file, selected_clusters):
+    with open(cluster_file) as f:
+        cluster_list = json.load(f)
+    selected_clusters = set(selected_clusters)
+    cells = {}
+    for cell in cluster_list:
+        cell_info = cell[0]
+        clusters = cell[1]
+        cell_id = cell_info['_barcode']['unCell']
+        cell_clusters = set(c['unCluster'] for c in clusters)
+        assert cell_id not in cells
+        cells[cell_id] = cell_clusters
+        
+        
+    selected_cells = []
+    cluster_labels = []
+    for cell, clusters in cells.items():
+        cell_clusters = clusters & selected_clusters
+        assert len(cell_clusters) <= 1, "cell is not selected via two independent clusters"
+        if cell_clusters != set():
+            selected_cells.append(cell)
+            tmp_list = list(cell_clusters)
+            assert len(tmp_list) == 1
+            cluster_labels.append(str(tmp_list[0]))
+
+    return selected_cells, cluster_labels
+```
+
+```{python}
+cells, labels_coarse = select_clusters("results/downstream_analysis/analyse_cd8_toomanycells/prior/cluster_list.json", [1, 32])
+```
+
+```{python}
+cells, labels = select_clusters("results/downstream_analysis/analyse_cd8_toomanycells/prior/cluster_list.json", [15, 2, 33, 48])
+```
+
+```{python}
+cells, labels_fine = select_clusters("results/downstream_analysis/analyse_cd8_toomanycells/prior/cluster_list.json", [25, 20, 17, 6, 3, 33, 49, 58])
+```
+
+```{python}
+assert len(cells) == adata.shape[0]
+```
+
+```{python}
+tmp_adata = adata[cells, :].copy()
+```
+
+```{python}
+tmp_adata.obs["cluster_labels"] = labels
+tmp_adata.obs["cluster_labels_fine"] = labels_fine
+tmp_adata.obs["cluster_labels_coarse"] = labels_coarse
+```
+
+```{python}
+sc.pl.umap(tmp_adata, color=["HAVCR2", "GZMK", "GZMB", "ZNF683", "cluster_labels", "cluster_labels_fine", "cluster_labels_coarse", "tumor_type", "origin", "phase", "platform", "dataset"])
+```
+
+```{python}
+sc.pl.umap(tmp_adata, color=["HAVCR2", "LAG3", "PDCD1", "GZMK", "GZMB", "ZNF683", "cluster_labels", "cluster_labels_fine", "tumor_type", "origin", "phase", "platform", "dataset"])
+```
+
+```{python}
+sc.tl.rank_genes_groups(tmp_adata, 'cluster_labels_coarse', method='t-test')
+sc.pl.rank_genes_groups_dotplot(tmp_adata)
+```
+
+```{python}
+sc.tl.rank_genes_groups(tmp_adata, 'cluster_labels', method='t-test')
+sc.pl.rank_genes_groups_dotplot(tmp_adata)
+```
+
+```{python}
+sc.tl.rank_genes_groups(tmp_adata, 'cluster_labels_fine', method='t-test')
+sc.pl.rank_genes_groups_dotplot(tmp_adata)
+```
+
+```{python}
+
+```

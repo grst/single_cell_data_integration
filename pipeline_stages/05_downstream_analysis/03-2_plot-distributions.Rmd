@@ -1,0 +1,138 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(cowplot)
+# library(ggpubr)
+fig_size = function(width, height) options(repr.plot.width = width, repr.plot.height = height)
+```
+
+```{r}
+r_obs = read_csv("../../results/downstream_analysis/edger/r_obs.csv", guess_max=100000)
+```
+
+```{r}
+r_obs = r_obs %>% mutate(clusters=as.factor(clusters)) %>%
+  mutate(tumor_type = ifelse(tumor_type == "LUAD", "NSCLC", tumor_type)) %>%
+  mutate(batch_patient = paste0(dataset, "_", patient))
+```
+
+## CD8+ T cells per tumor type
+
+```{r}
+fig_size(6,3)
+ggplot(r_obs, aes(x=dataset, fill=tumor_type)) +
+    geom_bar() + 
+    scale_fill_brewer(type="qual") + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+    coord_flip()
+```
+
+```{r}
+fig_size(4, 2)
+ggplot(r_obs, aes(x=tumor_type, fill=tumor_type)) +
+    geom_bar() + 
+    scale_fill_brewer(type="qual") + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+        coord_flip() + 
+    xlab("tumor type")
+```
+
+Lung has few CD8+ T cells. This is consistent with estimates based on TCGA data. 
+(-> compute the fraction of CD8+ T cells compared to other cells in tumor_primary samples) 
+
+
+## absolute cluster size
+
+```{r}
+fig_size(4, 2.5)
+ggplot(r_obs, aes(x=clusters, fill=tumor_type)) + 
+  geom_bar() +
+scale_fill_brewer(type="qual") + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+        coord_flip() + 
+    xlab("cluster")
+```
+
+```{r}
+ggplot(r_obs, aes(x=tumor_type, fill=clusters)) + 
+  geom_bar(position=position_fill()) + 
+  scale_fill_brewer(type="qual", palette="Set1")
+```
+
+```{r}
+cells_per_tumor_type = r_obs %>% 
+  group_by(tumor_type) %>%
+  summarise(cells_per_tumor_type=n())
+cells_per_tumor_type
+```
+
+```{r}
+tumor_type_per_cluster = r_obs %>% 
+  group_by(clusters, tumor_type) %>% 
+  summarise(n=n()) %>% 
+  inner_join(cells_per_tumor_type) %>% 
+  mutate(fraction=n/cells_per_tumor_type)
+```
+
+```{r}
+ggplot(tumor_type_per_cluster, aes(x=clusters, fill=tumor_type, y=fraction)) + 
+  geom_bar(position=position_fill(), stat="identity") + 
+  scale_fill_brewer(type="qual")
+```
+
+```{r}
+ggplot(r_obs, aes(x=dataset, fill=clusters)) + 
+  geom_bar(position=position_fill()) + 
+  scale_fill_brewer(type="qual", palette="Set1") +  
+  facet_wrap(~tumor_type, scales="free_x")
+```
+
+```{r}
+cells_per_patient = r_obs %>% 
+  group_by(tumor_type, batch_patient) %>%
+  summarise(cells_per_patient=n())
+```
+
+```{r}
+cells_per_cluster = r_obs %>% 
+  group_by(clusters) %>%
+  summarise(cells_per_cluster=n())
+```
+
+```{r}
+patient_cluster = tidyr::crossing(cells_per_patient, cells_per_cluster)
+```
+
+```{r}
+tumor_type_per_cluster = r_obs %>% 
+  group_by(clusters, tumor_type, batch_patient) %>% 
+  summarise(n=n()) %>% 
+  right_join(patient_cluster) %>% 
+  mutate(n=if_else(is.na(n), 0L, n)) %>% 
+  mutate(fraction=n/cells_per_patient) 
+```
+
+```{r}
+tumor_type_per_cluster %>% 
+    ggplot(aes(x=clusters, y=fraction, fill=tumor_type)) + geom_boxplot() + 
+    scale_fill_brewer(type="qual")
+```
+
+```{r}
+
+```

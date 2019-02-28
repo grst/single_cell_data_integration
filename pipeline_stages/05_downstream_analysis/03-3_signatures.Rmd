@@ -1,0 +1,163 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import sys
+sys.path.append("lib")
+from jupytertools import setwd, display
+setwd()
+from goatools.base import download_go_basic_obo, download_ncbi_associations
+from goatools.obo_parser import GODag
+from goatools.associations import read_associations, read_ncbi_gene2go
+from goatools.go_enrichment import GOEnrichmentStudy
+import seaborn as sns
+from plotnine import (
+    ggplot, aes, geom_text, geom_point, facet_wrap, facet_grid, 
+    ylim, theme_538, theme_bw, scale_y_reverse, xlim, geom_bar
+)
+import itertools
+```
+
+```{python}
+adata_all = sc.read_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
+```
+
+```{python}
+adata = sc.read_h5ad("results/downstream_analysis/adata_cd8_clusters.h5ad")
+```
+
+```{python}
+adata_all.obs_names
+```
+
+```{python}
+adata_all.obs["cell_subtype"] = adata_all.obs["cell_type"].tolist()
+```
+
+```{python}
+adata_all.obs.loc[adata.obs_names, "cell_subtype"] = adata.obs["clusters"].tolist()
+```
+
+```{python}
+adata_all = adata_all[adata_all.obs["cell_subtype"] != "T cell CD8+", :].copy()
+```
+
+```{python}
+sc.pl.umap(adata_all, color="cell_subtype", legend_loc="on data")
+```
+
+```{python}
+from pygenesig.gini import GiniSignatureGenerator
+from pygenesig.mcp_counter import MCPSignatureGenerator
+from pygenesig.tools import translate_signatures, collapse_matrix
+```
+
+```{python}
+
+```
+
+```{python}
+target = np.array(adata_all.obs["cell_subtype"].tolist())
+expr = adata_all.raw.X[:, adata_all.raw.var_names.isin(adata_all.var_names)].T.toarray()
+```
+
+```{python}
+percentile_fun = lambda df: df.apply(lambda k: np.percentile(k, 66), axis=1)
+```
+
+```{python}
+sg = GiniSignatureGenerator(expr, target, min_expr=.5, max_rk=3,
+                            min_gini=.7, aggregate_fun=percentile_fun)
+gini_sig = sg.mk_signatures()
+```
+
+```{python}
+# sg_mcp = MCPSignatureGenerator(adata_all.X.T, target, min_fc=1.25, min_sfc=1.25, min_auc=.8)
+# mcp_sig = sg_mcp.mk_signatures()
+```
+
+```{python}
+gini_sig_trans = translate_signatures(gini_sig, {i: s for i, s in enumerate(adata_all.var_names)})
+```
+
+```{python}
+gini_sig_trans
+```
+
+```{python}
+sc.pl.umap(adata_all, color=["TRAV12-2", "IL7R", "GZMK", "ZNF683", "MTRNR2L12"], ncols=2)
+```
+
+```{python}
+sc.pl.draw_graph(adata, color=["clusters", "TIGIT", "CD96", "ZNF683", "TRAV12-2",
+                               "IL7R", "TCF7", "MTRNR2L12", "CMC1"], legend_loc="on data", ncols=2)
+```
+
+```{python}
+from pygenesig.mcp_counter import MCPSignatureTester
+st = MCPSignatureTester(expr, target)
+score_matrix = st.score_signatures(gini_sig)
+```
+
+```{python}
+from pygenesig.visualization import aggregate_scores, plot_score_heatmap
+sig_labels = st.sort_signatures(gini_sig)
+heatmap = aggregate_scores(sig_labels, score_matrix, target)
+plot_score_heatmap(heatmap, clip=None)
+```
+
+```{python}
+de_genes = pd.read_csv("results/downstream_analysis/edger/de_genes.tsv", sep="\t", index_col=0)
+clusters = np.unique(de_genes["cluster"].values)
+```
+
+```{python}
+top10 = {
+    c: de_genes.loc[de_genes["cluster"] == c,:].sort_values("logFC", ascending=False)["gene_symbol"].tolist()[:10]
+        for c in clusters
+}
+```
+
+```{python}
+top10_t = translate_signatures(top10, rosetta={
+    sym : i for i, sym in enumerate(adata_all.var_names.tolist())
+}, ignore_missing=True)
+```
+
+```{python}
+score_matrix = st.score_signatures(top10_t)
+```
+
+```{python}
+from pygenesig.visualization import aggregate_scores, plot_score_heatmap
+sig_labels = st.sort_signatures(gini_sig)
+heatmap = aggregate_scores(top10_t.keys(), score_matrix, target)
+plot_score_heatmap(heatmap, clip=None)
+```
+
+```{python}
+cols = [list(l) for l in [*zip(*[[c, g] for c, genes in gini_sig_trans.items() 
+                              for g in genes])]]
+pd.DataFrame().assign(ct=cols[0], gene=cols[1]).to_csv("results/downstream_analysis/gini_sig.csv")
+```
+
+```{python}
+
+```

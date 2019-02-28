@@ -19,8 +19,18 @@ import numpy as np
 from matplotlib import pyplot as plt
 import sys
 sys.path.append("lib")
-from jupytertools import setwd
+from jupytertools import setwd, display
 setwd()
+from goatools.base import download_go_basic_obo, download_ncbi_associations
+from goatools.obo_parser import GODag
+from goatools.associations import read_associations, read_ncbi_gene2go
+from goatools.go_enrichment import GOEnrichmentStudy
+import seaborn as sns
+from plotnine import (
+    ggplot, aes, geom_text, geom_point, facet_wrap, facet_grid, 
+    ylim, theme_538, theme_bw, scale_y_reverse, xlim, geom_bar
+)
+import itertools
 ```
 
 ```{python}
@@ -28,19 +38,173 @@ adata = sc.read_h5ad("results/downstream_analysis/adata_cd8_clusters.h5ad")
 ```
 
 ```{python}
-sc.pl.draw_graph(adata, color=["clusters", "HAVCR2", "GZMK", "GZMB", "ZNF683"], legend_loc="on data")
+sc.pl.draw_graph(adata, color=["clusters", "HAVCR2", "GZMK", "GZMB", "ZNF683", "CXCR5", "ENTPD1",
+                               "CXCL13", "PDCD1"], legend_loc="on data", ncols=2)
+```
+
+## prepare for DE analysis in R
+
+```{python}
+# prepare R objects
+tmp_adata = sc.AnnData(X=adata.raw.X, obs=adata.obs, var=adata.raw.var)
+sc.pp.filter_genes(tmp_adata, min_cells=300)
+# edgeR expects raw counts, normalization does not have any effect. We can therefore simply undo log1p
+r_mat = np.expm1(tmp_adata.X).T
+r_obs = tmp_adata.obs
+r_genes = pd.DataFrame().assign(gene_symbol=tmp_adata.var.index.values)
 ```
 
 ```{python}
-sc.tl.rank_genes_groups(adata, 'clusters', method='t-test')
+import scipy.io
 ```
 
 ```{python}
-sc.pl.rank_genes_groups_dotplot(adata)
+scipy.io.mmwrite("results/downstream_analysis/edger/r_mat.mtx", r_mat)
 ```
 
 ```{python}
-sc.pl.rank_genes_groups(adata)
+# np.savetxt("results/downstream_analysis/edger/r_mat.csv", r_mat)
+r_obs.to_csv("results/downstream_analysis/edger/r_obs.csv")
+r_genes.to_csv("results/downstream_analysis/edger/r_genes.csv")
+```
+
+## re-import results from R
+
+```{python}
+de_genes = pd.read_csv("results/downstream_analysis/edger/de_genes.tsv", sep="\t", index_col=0)
+clusters = np.unique(de_genes["cluster"].values)
+```
+
+```{python}
+de_genes_pos = de_genes.loc[de_genes["logFC"] > 0, :]
+de_genes_pos = de_genes_pos.groupby("cluster")\
+    .apply(lambda df: df.assign(rank=df["logFC"].rank(ascending=False)))\
+    .reset_index(drop=True)
+```
+
+### most-DE genes
+
+```{python}
+(
+    ggplot(de_genes_pos.loc[de_genes_pos["rank"] <= 10, :],
+       aes(x="logFC", y="rank", label="'   ' + gene_symbol")) +
+     geom_text(angle=0, ha="left", size=6) +
+     geom_point(color="black") + 
+     facet_wrap(' ~ cluster') + 
+    theme_bw() + 
+    scale_y_reverse(limits=(10, .5)) + 
+    xlim(0, 5)
+)
+```
+
+### Number of DE genes
+at FDR = 0.001
+
+```{python}
+ggplot(de_genes_pos[de_genes_pos["FDR"] < 0.001], aes(x="cluster")) + geom_bar()
+```
+
+```{python}
+def jaccard_ind(set1, set2):
+    set1 = set(set1)
+    set2 = set(set2)
+    return len(set1 & set2)/len(set1 | set2)
+```
+
+```{python}
+jaccard = np.empty((len(clusters), len(clusters)))
+for i1, i2 in itertools.product(range(len(clusters)), range(len(clusters))):
+    c1, c2 = (clusters[i1], clusters[i2])
+    jaccard[i1, i2] = jaccard_ind(
+        de_genes_pos.loc[de_genes_pos["cluster"] == c1,"gene_symbol"].tolist(),
+        de_genes_pos.loc[de_genes_pos["cluster"] == c2,"gene_symbol"].tolist()
+    )
+```
+
+```{python}
+sns.clustermap(jaccard, figsize=(4,4))
+```
+
+## GO-term enrichment
+
+```{python}
+obo_fname = download_go_basic_obo("results/downstream_analysis/go/go-basic.obo")
+```
+
+```{python}
+geneid2gos = read_associations("tables/go_term_assoc.tsv")
+```
+
+```{python}
+obodag = GODag(obo_fname)
+```
+
+```{python}
+goaeobj = GOEnrichmentStudy(
+    r_genes["gene_symbol"].tolist(), # list of background genes 
+    geneid2gos, 
+    obodag, 
+    propagate_counts = True, # propagate counts to parent terms
+    alpha = 0.01,
+    methods = ['fdr_bh']
+)
+```
+
+```{python}
+goea_results_all = dict()
+for cluster in clusters:
+    tmp_de = de_genes_pos[(de_genes_pos["cluster"] == cluster) &
+                          (de_genes_pos["rank"] <= 100)]
+    goea_results_all[cluster] = goaeobj.run_study(tmp_de["gene_symbol"].tolist()) # list of genes to test. 
+```
+
+```{python}
+goea_table = pd.DataFrame.from_records(
+    ({
+        "cluster" : cluster,
+        "go": rec.GO,
+        "go_name": rec.goterm.name,
+        "go_namespace": rec.goterm.namespace,
+        "fdr": rec.p_fdr_bh,
+        "p": rec.p_uncorrected
+    } for cluster, records in goea_results_all.items() for rec in records),
+    columns = ["cluster", "go", "go_name", "go_namespace", "fdr", "p"]
+)
+
+```
+
+```{python}
+goea_table
+```
+
+```{python}
+go_tab_fil = goea_table[(goea_table["go_namespace"] == "biological_process")]
+```
+
+```{python}
+go_tab_fil = go_tab_fil.assign(log_p = -np.log10(go_tab_fil['p']))
+```
+
+```{python}
+go_tab_pivot = go_tab_fil[["cluster", "go", "go_name", "log_p"]].pivot_table(index=["go", "go_name"], columns="cluster")
+```
+
+```{python}
+# the N most enriched terms for each cluster
+top_go = [go_tab_fil.loc[(go_tab_fil["cluster"] == cluster) & 
+                         (go_tab_fil["fdr"] < 0.01), :]\
+                              .sort_values("fdr")["go"].tolist()[:5] 
+          for cluster in clusters]
+top_go = set(go for go_list in top_go for go in go_list)
+```
+
+```{python}
+sns.clustermap(go_tab_pivot[go_tab_pivot.index.get_level_values('go').isin(top_go)],
+              col_cluster=True, figsize=(7, 10), metric="euclidean")
+```
+
+```{python}
+
 ```
 
 ```{python}

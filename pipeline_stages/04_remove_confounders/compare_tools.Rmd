@@ -126,7 +126,15 @@ adata.var.drop(["gene_ids-{}".format(i) for i in range(8)] + \
 ```
 
 ```{python}
-adata.write_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
+adata_export = adata.copy()
+```
+
+```{python}
+adata_export.obsm["X_umap"] = adata_export.obsm["X_umap_harmony"]
+```
+
+```{python}
+adata_export.write_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
 ```
 
 ```{python}

@@ -20,7 +20,7 @@ colors["cell_type"] = {'B cell': '#1f77b4',
  'T cell CD4+': '#d62728',
  'T cell CD8+': '#9467bd',
  'T cell reg.': '#8c564b',
- 'myeoblast-derived': '#e377c2',
+ 'myeloblast-derived': '#e377c2',
  'pDC': '#17becf',
  'stem': '#bcbd22',
  'unknown': '#7f7f7f'

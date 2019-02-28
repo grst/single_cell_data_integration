@@ -1,0 +1,281 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
+---
+
+```{r}
+library(conflicted)
+library(dplyr)
+conflict_prefer("filter", "dplyr")
+conflict_prefer("mutate", "dplyr")
+library(dbplyr)
+library(tidyr)
+library(tibble)
+library(readr)
+library(ggplot2)
+library(magrittr)
+library(readxl)
+library(stringr)
+# other packages
+library(cowplot)
+library(DBI)
+library(survival)
+library(survminer)
+library(BioQC)
+library(pheatmap)
+library(dplyr)
+
+options(repr.matrix.max.cols=50, repr.matrix.max.rows=6)
+fig_size = function(width, height) options(repr.plot.width = width, repr.plot.height = height)
+```
+
+```{r}
+tcga_survival = suppressWarnings(read_xlsx("../../tables/tcga_survival.xlsx", sheet = 1))
+```
+
+```{r}
+tcga_db = dbConnect(RSQLite::SQLite(), "/db/tcga.sqlite", flags = RSQLite::SQLITE_RO)
+```
+
+```{r}
+indications = tbl(tcga_db, "cohort") %>% pull(cohort)
+```
+
+```{r}
+luad = tbl(tcga_db, "expression") %>% 
+    inner_join(tbl(tcga_db, "sample")) %>% 
+    filter(sample_type == "TP", cohort == "LUAD") %>% 
+    select(sample, tpm, gene_symbol) %>% 
+    collect() %>% 
+    spread(sample, tpm) %>%
+    as.data.frame() %>%
+    column_to_rownames("gene_symbol")
+```
+
+```{r}
+de_genes = read_tsv("../../results/downstream_analysis/edger/de_genes.tsv")
+```
+
+```{r}
+de_genes2 = de_genes %>% 
+    filter(logFC > 0, FDR < 0.001) %>% 
+    group_by(cluster) %>% 
+    mutate(rank = rank(-logFC)) %>%
+    filter(rank < 10) %>% 
+    ungroup()
+```
+
+```{r}
+clusters = de_genes2 %>% pull(cluster) %>% unique()
+```
+
+```{r}
+signatures = sapply(clusters, function(cluster) {
+    sig_genes = de_genes2 %>% 
+        filter(cluster == !!cluster) %>%
+        pull(gene_symbol)
+    rownames(luad) %in% sig_genes
+}, simplify=FALSE, USE.NAMES=TRUE)
+```
+
+```{r}
+gini_sig =     read_csv("../../results/downstream_analysis/gini_sig.csv")
+signatures2 = sapply(as.character(0:8), function(cluster) {
+    sig_genes = gini_sig %>% 
+        filter(ct == !!cluster) %>%
+        pull(gene)
+    rownames(luad) %in% sig_genes
+}, simplify=FALSE, USE.NAMES=TRUE)
+```
+
+```{r}
+signatures3 = list()
+signatures3[["exhaustion"]] = rownames(luad) %in% c('HAVCR2',
+  'GZMH',
+  'LAG3',
+  'CXCL13',
+  'APOBEC3G',
+  'RBPJ',
+  'TIGIT',
+  'IFNG',
+  'CCL3')
+signatures3[["c0"]] = rownames(luad) %in% c('DUSP2', 'GZMK')
+signatures3[["znf"]] = rownames(luad) %in% c('ZNF683')
+```
+
+```{r}
+signatures = signatures3
+```
+
+```{r}
+bioqc_res = wmwTest(as.matrix(luad), signatures, valType = "p.two.sided")
+```
+
+```{r}
+bioqc_score = absLog10p(bioqc_res)
+```
+
+```{r}
+bioqc_score2 = apply(bioqc_score, 1:2, function(i) {min(30, i)})
+```
+
+```{r}
+cd8_fraction = tbl(tcga_db, "infiltration") %>% 
+    filter(cell_type == "T cell CD8+", method == "epic") %>% 
+    collect() %>% 
+    select(-method, -cell_type) %>%
+    as.data.frame() %>% 
+    column_to_rownames("sample")
+colnames(cd8_fraction) = c("CD8+ fraction")
+```
+
+```{r}
+mcp_score = sapply(signatures, function(sig) {
+    as.matrix(luad)[sig, ,drop=FALSE] %>% apply(2, mean)
+}) %>% t()
+mcp_score = mcp_score[!apply(is.nan(mcp_score), 1, any),]
+```
+
+```{r}
+fig_size(8, 3)
+pheatmap(mcp_score, scale="row", clustering_distance_cols="correlation", 
+         clustering_method = "average", annotation_col=cd8_fraction, 
+         show_colnames=FALSE)
+```
+
+```{r}
+sample = tbl(tcga_db, "sample") %>% collect()
+```
+
+```{r}
+scores = mcp_score %>% 
+    as_tibble(rownames="cluster") %>% 
+    gather(sample, score, -cluster) %>% 
+    inner_join(sample) %>% 
+    inner_join(as_tibble(cd8_fraction, rownames="sample")) %>% 
+    # should not happen, except there are two samples for the same patient 
+    group_by(patient, cluster) %>% 
+    summarise(score = mean(score), cd8_fraction = mean(`CD8+ fraction`))
+```
+
+```{r}
+tmp_surv = scores %>% 
+    inner_join(tcga_survival, by=c("patient"="bcr_patient_barcode")) %>% 
+    filter(type == "LUAD") %>% 
+    select(patient, gender, ajcc_pathologic_tumor_stage, 
+           birth_days_to, OS, OS.time, cluster, score, cd8_fraction) %>% 
+#     ### Attention!!!
+#     mutate(score = score * cd8_fraction) %>% 
+    spread(cluster, score) %>% 
+    ungroup() %>% 
+    mutate(gender=as.factor(gender), tumor_stage=as.factor(ajcc_pathologic_tumor_stage)) 
+
+```
+
+```{r}
+col = "2"
+thres = .4
+```
+
+```{r}
+tmp_surv_status = tmp_surv %>% 
+    dplyr::mutate(status = if_else(!!sym(col) > quantile(!!sym(col), 1-thres),
+                            "high", if_else(!!sym(col) < quantile(!!sym(col), thres),
+                                            "low", "nd"))) %>% 
+    filter(status != "nd") %>% 
+    mutate(status = as.factor(status)) %>% 
+    as.data.frame()
+```
+
+```{r}
+fit = surv_fit(Surv(OS.time, OS) ~ status, data=tmp_surv_status) #  + cd8_fraction + birth_days_to +
+              # ajcc_pathologic_tumor_stage + gender, data=tmp_surv_status)
+```
+
+```{r}
+ggsurvplot(fit, data=tmp_surv_status, pval = TRUE)
+```
+
+```{r}
+cox_fit = coxph(Surv(OS.time, OS) ~ status + cd8_fraction + tumor_stage + birth_days_to + gender, data=tmp_surv_status)
+```
+
+```{r}
+s = summary(cox_fit)
+s_df = tbl_df(coefficients(s))
+p_values = s_df$`Pr(>|z|)`
+p_status = p_values[1]
+```
+
+```{r}
+ggadjustedcurves(cox_fit, variable="status", data=tmp_surv_status) + 
+    ggtitle(paste0("p = ", round(p_status, 4)))
+```
+
+```{r}
+
+```
+
+## ratios of clusters
+
+```{r}
+clusters = rownames(mcp_score)
+```
+
+```{r}
+clus1= "cluster0"
+clus2= "cluster2"
+thres=.5
+```
+
+```{r}
+for (clus1 in clusters) {
+    for(clus2 in clusters) {
+        if(clus1 != clus2) { 
+            tmp_surv_status = tmp_surv %>% 
+                dplyr::mutate(status = if_else(!!sym(clus1) > quantile(!!sym(clus1), 1-thres) &
+                                               !!sym(clus2) < quantile(!!sym(clus2), thres),
+                                               sprintf("%s-high,%s-low", clus1, clus2),
+                                               if_else(!!sym(clus2) > quantile(!!sym(clus2), 1-thres) & 
+                                                       !!sym(clus1) < quantile(!!sym(clus1), thres),
+                                                       sprintf("%s-high,%s-low", clus2, clus1),
+                                                       "nd"),
+                                               "nd")) %>%                                            
+                filter(status != "nd") %>% 
+                mutate(status = as.factor(status)) %>% 
+                as.data.frame()
+            # #kaplan meyer
+            #fit = surv_fit(Surv(OS.time, OS) ~ status, data=tmp_surv_status)
+            # print(ggsurvplot(fit, data=tmp_surv_status, pval = TRUE))
+            
+            # coxph
+            cox_fit = coxph(Surv(OS.time, OS) ~ status + cd8_fraction + tumor_stage + birth_days_to + gender, data=tmp_surv_status)
+            s = summary(cox_fit)
+            s_df = tbl_df(coefficients(s))
+            p_values = s_df$`Pr(>|z|)`
+            p_status = p_values[1]
+            plot = ggadjustedcurves(cox_fit, variable="status", data=tmp_surv_status) + 
+                ggtitle(paste0("p = ", round(p_status, 4)))
+            print(plot)
+        }
+    }
+}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```

@@ -13,6 +13,7 @@ jupyter:
 ---
 
 ```{r}
+library(conflicted)
 library(readr)
 library(dplyr)
 library(ggplot2)

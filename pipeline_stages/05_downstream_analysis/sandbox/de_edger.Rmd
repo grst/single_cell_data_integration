@@ -1,37 +1,188 @@
 ---
 title: "R Notebook"
 output: html_document
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
 ---
 
 ```{r}
+library(conflicted)
 library(edgeR)
 library(dplyr)
 library(readr)
+library(Matrix)
+options(repr.matrix.max.cols=50, repr.matrix.max.rows=6)
+
 ```
 
 
 ```{r}
-r_mat = read_delim("../../results/downstream_analysis/edger/r_mat.csv", delim=" ", col_names=FALSE)
-r_obs = read_csv("../../results/downstream_analysis/edger/r_obs.csv")
-r_genes = read_csv("../../results/downstream_analysis/edger/r_genes.csv")
+# r_mat = read_delim("../../../results/downstream_analysis/edger/r_mat.csv", delim=" ", col_names=FALSE)
+r_mat = readMM("../../../results/downstream_analysis/edger/r_mat.mtx")
+r_obs = read_csv("../../../results/downstream_analysis/edger/r_obs.csv", guess_max=100000)
+r_genes = read_csv("../../../results/downstream_analysis/edger/r_genes.csv")
 ```
 
 ```{r}
 r_obs2 = r_obs %>% 
   mutate(dataset = as.factor(dataset),
-         cluster_label1 = as.factor(cluster_label1),
-         cluster_label2 = as.factor(cluster_label2))
+         clusters = as.factor(paste0("cluster_", clusters)),
+         tumor_type = if_else(tumor_type == "LUAD", "NSCLC", tumor_type))
 
 ```
 
 
 ```{r}
-design = model.matrix(~cluster_label1 + dataset + n_genes + percent_mito, data=r_obs)
-dge = DGEList(counts=r_mat, samples=r_obs, genes=r_genes)
+design = model.matrix(~0+clusters + dataset + n_genes + percent_mito, data=r_obs2)
+```
+
+```{r}
+contrasts = makeContrasts(
+      cluster0 = clusterscluster_0 - (clusterscluster_1+clusterscluster_2+clusterscluster_3+
+                                     clusterscluster_4+clusterscluster_5+clusterscluster_6+
+                                     clusterscluster_7+clusterscluster_8)/8
+    , cluster1 = clusterscluster_1 - (clusterscluster_0+clusterscluster_2+clusterscluster_3+
+                                     clusterscluster_4+clusterscluster_5+clusterscluster_6+
+                                     clusterscluster_7+clusterscluster_8)/8
+    , cluster2 = clusterscluster_2 - (clusterscluster_1+clusterscluster_0+clusterscluster_3+
+                                     clusterscluster_4+clusterscluster_5+clusterscluster_6+
+                                     clusterscluster_7+clusterscluster_8)/8
+    , cluster3 = clusterscluster_3 - (clusterscluster_1+clusterscluster_2+clusterscluster_0+
+                                     clusterscluster_4+clusterscluster_5+clusterscluster_6+
+                                     clusterscluster_7+clusterscluster_8)/8
+    , cluster4 = clusterscluster_4 - (clusterscluster_1+clusterscluster_2+clusterscluster_3+
+                                     clusterscluster_0+clusterscluster_5+clusterscluster_6+
+                                     clusterscluster_7+clusterscluster_8)/8
+    , cluster5 = clusterscluster_5 - (clusterscluster_1+clusterscluster_2+clusterscluster_3+
+                                     clusterscluster_4+clusterscluster_0+clusterscluster_6+
+                                     clusterscluster_7+clusterscluster_8)/8
+    , cluster6 = clusterscluster_6 - (clusterscluster_1+clusterscluster_2+clusterscluster_3+
+                                     clusterscluster_4+clusterscluster_5+clusterscluster_0+
+                                     clusterscluster_7+clusterscluster_8)/8
+    , cluster7 = clusterscluster_7 - (clusterscluster_1+clusterscluster_2+clusterscluster_3+
+                                     clusterscluster_4+clusterscluster_5+clusterscluster_6+
+                                     clusterscluster_0+clusterscluster_8)/8
+    , cluster8 = clusterscluster_8 - (clusterscluster_1+clusterscluster_2+clusterscluster_3+
+                                     clusterscluster_4+clusterscluster_5+clusterscluster_6+
+                                     clusterscluster_7+clusterscluster_0)/8 
+    , levels=colnames(design)
+)
+```
+
+```{r}
+dge = DGEList(counts=r_mat, samples=r_obs2, genes=r_genes)
+```
+
+```{r}
 dge <- calcNormFactors(dge)
+```
+
+```{r}
 dge <- estimateDisp(dge, design = design)
+```
+
+```{r}
 fit <- glmQLFit(dge, design = design)
-qlf <- glmQLFTest(fit)
-tt <- topTags(qlf, n = Inf)
+```
+
+```{r}
+qlfs = sapply(colnames(contrasts), function(cluster) {
+    message(paste0("working on ", cluster))
+    glmQLFTest(fit, contrast=contrasts[,cluster])
+}, USE.NAMES=TRUE, simplify=FALSE)
+```
+
+```{r}
+tts = sapply(qlfs, function(qlf) {
+    topTags(qlf, n=Inf, adjust.method="BH")
+}, USE.NAMES=TRUE, simplify=FALSE)
+```
+
+```{r}
+all_results = bind_rows(lapply(names(tts), function(cluster) {
+    tts[[cluster]]$table %>% mutate(cluster=cluster)
+})) %>% as_tibble()
+```
+
+```{r}
+save(design, dge, fit, qlfs, tts, all_results, file="../../../results/downstream_analysis/edger/results.rda", compress = FALSE)
+```
+
+```{r}
+write_tsv(all_results, "../../../results/downstream_analysis/edger/de_genes.tsv")
+```
+
+```
+
+
+## repeat the analysis for each tumor type individually
+
+```{r}
+tumor_types = r_obs2 %>% pull(tumor_type) %>% unique()
+```
+
+```{r}
+sapply(tumor_types, function(tumor_type) {
+    
+    # prepare data and bulid design matrix
+    message(paste0("# Working on ", tumor_type))
+    tmp_obs = r_obs2 %>% filter(tumor_type == !!tumor_type) %>%
+        mutate(clusters=droplevels(clusters)) %>%
+        mutate(dataset=droplevels(dataset))
+    if(tumor_type == "LIHC") {
+        # single dataset, all percent_mito == 0
+        design = model.matrix(~0+clusters + n_genes, data=tmp_obs)
+    } else {
+        design = model.matrix(~0+clusters + dataset + n_genes + percent_mito, data=tmp_obs)
+    }
+    
+    # build contrasts as diagonal matrix
+    contrasts = sapply(1:nlevels(tmp_obs$clusters), function(i) {
+        n = nlevels(tmp_obs$clusters)
+        v = rep(0, length(colnames(design)))
+        names(v) = colnames(design)
+        v[1:n] = -1/(n-1)
+        v[i] = 1
+        v
+    })
+    colnames(contrasts) = levels(tmp_obs$clusters)
+    
+    # run DE analysis. 
+    dge = DGEList(counts=r_mat[,r_obs2$tumor_type == tumor_type], 
+                  samples=tmp_obs, genes=r_genes)
+    dge <- calcNormFactors(dge)
+    message("estimateDisp")
+    dge <- estimateDisp(dge, design = design)
+    message("glmQLFit")
+    fit <- glmQLFit(dge, design = design)
+    qlfs = sapply(colnames(contrasts), function(cluster) {
+        message(paste0("working on QLFTest for ", cluster))
+        glmQLFTest(fit, contrast=contrasts[,cluster])
+    }, USE.NAMES=TRUE, simplify=FALSE)
+    tts = sapply(qlfs, function(qlf) {
+        topTags(qlf, n=Inf, adjust.method="BH")
+    }, USE.NAMES=TRUE, simplify=FALSE)
+    all_results = bind_rows(lapply(names(tts), function(cluster) {
+        tts[[cluster]]$table %>% mutate(cluster=cluster)
+    })) %>% as_tibble()
+    
+    # save results
+    write_tsv(all_results, paste0("../../../results/downstream_analysis/edger/de_genes_", tumor_type, ".tsv"))
+    save(design, dge, fit, qlfs, tts, all_results,
+         file=paste0("../../../results/downstream_analysis/edger/results_", tumor_type, ".rda"), 
+         compress = FALSE)
+}, USE.NAMES=FALSE, simplify=TRUE)
+```
+
+```{r}
 
 ```

@@ -1,0 +1,102 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+import pandas as pd
+import scanpy.api as sc
+import numpy as np
+from matplotlib import pyplot as plt
+import sys
+sys.path.append("lib")
+from jupytertools import setwd
+setwd()
+```
+
+```{python}
+adata = sc.read_h5ad("results/downstream_analysis/adata_cd8_clusters.h5ad")
+```
+
+```{python}
+sc.pl.draw_graph(adata, color=["clusters", "HAVCR2", "GZMK", "GZMB", "ZNF683"], legend_loc="on data")
+```
+
+```{python}
+adata2 = adata[adata.obs["clusters"].isin(["2"]), :].copy()
+```
+
+```{python}
+sc.pl.paga(adata2)
+```
+
+```{python}
+sc.tl.draw_graph(adata2)
+```
+
+```{python}
+sc.pl.draw_graph(adata2, color=["ZNF683", "HAVCR2"])
+```
+
+```{python}
+adata2.uns['iroot'] = 500
+```
+
+```{python}
+sc.tl.dpt(adata2)
+```
+
+```{python}
+sc.pl.draw_graph(adata2, color=["dpt_pseudotime"])
+```
+
+```{python}
+
+```
+
+```{python}
+adata2.uns['iroot'] = np.where(adata2.obs["exhaustion_status"] == "not exhausted")[0][0]
+```
+
+```{python}
+fa2 = adata2.obsm["X_draw_graph_fa"][:,1]
+```
+
+```{python}
+adata2.obs["exhaustion_score"] = ""
+for v in np.arange(min(fa2), max(fa2), abs(max(fa2)-min(fa2))/5):
+    adata2.obs.loc[fa2 > v, "exhaustion_score"] = "exh_{:.2f}".format(v)
+```
+
+```{python}
+sc.pl.draw_graph(adata2, color=["exhaustion_score"])
+```
+
+```{python}
+sc.pp.filter_genes(adata2, min_cells=300)
+```
+
+```{python}
+sc.tl.rank_genes_groups(adata2, groupby="exhaustion_score", method="logreg")
+```
+
+```{python}
+sc.pl.rank_genes_groups(adata2)
+```
+
+```{python}
+sc.pl.rank_genes_groups_dotplot(adata2)
+```
+
+```{python}
+
+```

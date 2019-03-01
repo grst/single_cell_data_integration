@@ -42,9 +42,7 @@ sc.tl.umap(tdata)
 sc.tl.leiden(tdata, resolution=2)
 ```
 
-```{python}
-sc.pl.umap(tdata, color=["CD4", "CD8A", "cell_type", "leiden"], ncols=2, legend_loc='on data')
-```
+# sc.pl.umap(tdata, color=["CD4", "CD8A", "cell_type", "leiden"], ncols=2, legend_loc='on data')
 
 ```{python}
 exclude_clusters = [

@@ -18,39 +18,124 @@ library(readr)
 library(dplyr)
 library(ggplot2)
 library(cowplot)
+library(dbplyr)
+library(tidyr)
+conflict_prefer("filter", "dplyr")
+library(RSQLite)
+library(ggpubr)
+library(ggbeeswarm)
+library(cowplot)
+conflict_prefer("ggsave", "cowplot")
 # library(ggpubr)
 fig_size = function(width, height) options(repr.plot.width = width, repr.plot.height = height)
+options(repr.matrix.max.cols=50, repr.matrix.max.rows=6)
 ```
 
 ```{r}
-r_obs = read_csv("../../results/downstream_analysis/edger/r_obs.csv", guess_max=100000)
+r_obs = read_csv("../../results/downstream_analysis/edger/r_obs2.csv", guess_max=100000)
+r_obs_all = read_csv("../../results/downstream_analysis/edger/r_obs_all.csv", guess_max=1000000)
+```
+
+```{r}
+colors = c(
+    "BRCA"="#7fc97f",
+    "LIHC"="#beaed4",
+    "NSCLC"="#fdc086",
+    "LUAD"="#fdc086",
+    "LUSC"="#fdc086"
+)
+colors_cluster = c(
+ 'C0 - GZMK'='#e41a1c',
+ 'C1 - ZNF683'='#377eb8',
+ 'C2 - exhaustion'= '#4daf4a',
+ 'C3 - ZNF683/chemokine'= '#984ea3',
+ 'C4 - IL7R'= '#ff7f00',
+ 'C5 - mitotic'= '#ffff33',
+ 'C6 - heat shock'= '#a65628',
+ 'C7 - IFIT'= '#f781bf',
+ 'C8 - Immunoglobulin'= '#999999'
+)
 ```
 
 ```{r}
 r_obs = r_obs %>% mutate(clusters=as.factor(clusters)) %>%
   mutate(tumor_type = ifelse(tumor_type == "LUAD", "NSCLC", tumor_type)) %>%
-  mutate(batch_patient = paste0(dataset, "_", patient))
-```
-
-## CD8+ T cells per tumor type
-
-```{r}
-fig_size(6,3)
-ggplot(r_obs, aes(x=dataset, fill=tumor_type)) +
-    geom_bar() + 
-    scale_fill_brewer(type="qual") + 
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
-    coord_flip()
+  mutate(batch_patient = paste0(dataset, " - ", patient))
 ```
 
 ```{r}
-fig_size(4, 2)
-ggplot(r_obs, aes(x=tumor_type, fill=tumor_type)) +
-    geom_bar() + 
-    scale_fill_brewer(type="qual") + 
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
-        coord_flip() + 
-    xlab("tumor type")
+r_obs_all = r_obs_all %>% 
+  mutate(tumor_type = ifelse(tumor_type == "LUAD", "NSCLC", tumor_type)) %>%
+  mutate(batch_patient = paste0(dataset, " - ", patient))
+```
+
+```{r}
+tcga_db = dbConnect(RSQLite::SQLite(), "/db/tcga.sqlite", flags = RSQLite::SQLITE_RO)
+```
+
+```{r}
+infiltration = tbl(tcga_db, "infiltration") %>% 
+    inner_join(tbl(tcga_db, "sample")) %>%
+    filter(cohort %in% c("BRCA", "LIHC", "LUAD", "LUSC")) %>%
+    filter(method == "epic", sample_type=="TP") %>% 
+    collect()
+```
+
+```{r}
+cd8_infil_tcga = infiltration %>% 
+    spread(cell_type, estimate) %>%
+    mutate(fraction = `T cell CD8+`/(`T cell CD8+`+`T cell CD4+`)) %>%
+    select(sample, fraction, cohort)
+    
+```
+
+```{r}
+p = cd8_infil_tcga %>% 
+    ggplot(aes(x = cohort, y=fraction)) + 
+        geom_quasirandom(aes(color=cohort)) + 
+        scale_color_manual(values=colors, guide=FALSE) + 
+        xlab("tumor type")
+p_tcga = p %>%
+        ggadd("median_mad", color="black") + coord_cartesian(ylim=c(0, 1))
+```
+
+```{r}
+count_cd8 = r_obs %>% group_by(tumor_type, batch_patient) %>% summarise(n_cd8=n())
+count_all = r_obs_all %>% filter(
+    cell_type %in% c("T cell CD8+", "T cell CD4+", "T cell reg.")
+) %>% group_by(tumor_type, dataset, batch_patient) %>% summarise(n=n())
+cd8_infil_sc = count_cd8 %>% inner_join(count_all) %>% 
+    mutate(fraction=n_cd8/n)
+```
+
+```{r}
+# check -> does not cluster by dataset. 
+fig_size(5, 2)
+cd8_infil_sc %>% 
+    ggplot(aes(x = tumor_type, y=fraction)) + 
+                    geom_quasirandom(aes(color=dataset)) 
+```
+
+```{r}
+p = cd8_infil_sc %>% 
+    ggplot(aes(x = tumor_type, y=fraction)) + 
+                    geom_quasirandom(aes(color=tumor_type)) + 
+                    scale_color_manual(values=colors, guide=FALSE) + 
+                     coord_cartesian(ylim=c(0, 1)) + 
+                     stat_compare_means(method="wilcox",
+                                        label.y=c(.95, .85, .75),
+                                           comparisons=list(c("BRCA", "LIHC"),
+                                                            c("BRCA", "NSCLC"),
+                                                            c("LIHC", "NSCLC"))) + 
+                    xlab("tumor type")
+
+p_sc = p %>% ggadd("median_mad", color="black")
+```
+
+```{r}
+fig_size(7, 3)
+plot_grid(p_sc, p_tcga, nrow=1, align="v", rel_widths=c(4,5))
+ggsave("../../results/downstream_analysis/cd8_ratio.pdf", width = 7, height = 3)
 ```
 
 Lung has few CD8+ T cells. This is consistent with estimates based on TCGA data. 
@@ -60,19 +145,13 @@ Lung has few CD8+ T cells. This is consistent with estimates based on TCGA data.
 ## absolute cluster size
 
 ```{r}
-fig_size(4, 2.5)
+fig_size(6, 2.5)
 ggplot(r_obs, aes(x=clusters, fill=tumor_type)) + 
   geom_bar() +
-scale_fill_brewer(type="qual") + 
+scale_fill_manual(values=colors) + 
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
         coord_flip() + 
     xlab("cluster")
-```
-
-```{r}
-ggplot(r_obs, aes(x=tumor_type, fill=clusters)) + 
-  geom_bar(position=position_fill()) + 
-  scale_fill_brewer(type="qual", palette="Set1")
 ```
 
 ```{r}
@@ -83,56 +162,61 @@ cells_per_tumor_type
 ```
 
 ```{r}
-tumor_type_per_cluster = r_obs %>% 
-  group_by(clusters, tumor_type) %>% 
-  summarise(n=n()) %>% 
-  inner_join(cells_per_tumor_type) %>% 
-  mutate(fraction=n/cells_per_tumor_type)
+all_patients = r_obs %>% select(tumor_type, batch_patient) %>% distinct()
+all_clusters = r_obs %>% select(clusters) %>% distinct()
+all_entities = all_patients %>% crossing(all_clusters)
 ```
 
 ```{r}
-ggplot(tumor_type_per_cluster, aes(x=clusters, fill=tumor_type, y=fraction)) + 
-  geom_bar(position=position_fill(), stat="identity") + 
-  scale_fill_brewer(type="qual")
+cluster_count_per_patient = r_obs %>% right_join(all_entities) %>% 
+    group_by(tumor_type, batch_patient, clusters) %>% 
+    summarise(n=sum(!is.na(index))) %>% 
+    group_by(tumor_type, batch_patient) %>% 
+    mutate(n_patient = sum(n)) %>% 
+    ungroup() %>%
+    mutate(fraction = n/n_patient)
 ```
 
 ```{r}
-ggplot(r_obs, aes(x=dataset, fill=clusters)) + 
-  geom_bar(position=position_fill()) + 
-  scale_fill_brewer(type="qual", palette="Set1") +  
-  facet_wrap(~tumor_type, scales="free_x")
+fig_size(18, 16)
+cluster_count_per_patient %>% select(batch_patient, tumor_type, clusters1 = clusters, f1=fraction) %>% 
+    inner_join(cluster_count_per_patient %>% select(batch_patient, tumor_type, 
+                                                    clusters2 = clusters, f2=fraction)) %>%
+    ggplot(aes(x=f1, y=f2)) + 
+        geom_point(aes(color=tumor_type)) +
+        facet_grid(clusters1~clusters2)  +
+        scale_color_manual(values=colors) + 
+        stat_smooth(method="lm") +
+        coord_cartesian(ylim=c(0, max(cluster_count_per_patient$fraction))) + 
+        stat_cor(method="spearman")
 ```
 
 ```{r}
-cells_per_patient = r_obs %>% 
-  group_by(tumor_type, batch_patient) %>%
-  summarise(cells_per_patient=n())
+# cluster_count_per_patient %>% 
+#     ggplot(aes(x=batch_patient, y=fraction, fill=clusters)) + 
+#     facet_grid(~tumor_type, drop=TRUE, space="free") +
+#     geom_bar(stat="identity", position="stack") + 
+#     scale_fill_manual(values=colors_cluster)
 ```
 
 ```{r}
-cells_per_cluster = r_obs %>% 
-  group_by(clusters) %>%
-  summarise(cells_per_cluster=n())
+fig_size(14, 4)
+p = cluster_count_per_patient %>% 
+    ggplot(aes(x=tumor_type, y=fraction, color=tumor_type)) + 
+    facet_wrap(~clusters, nrow=1) + geom_quasirandom() + 
+    scale_color_manual(values=colors) + 
+    stat_compare_means(method="wilcox",
+                                        label.y=c(.95, .85, .75),
+                                           comparisons=list(c("BRCA", "LIHC"),
+                                                            c("BRCA", "NSCLC"),
+                                                            c("LIHC", "NSCLC")))
+
+p %>% ggadd("median_mad", color="black")
 ```
 
-```{r}
-patient_cluster = tidyr::crossing(cells_per_patient, cells_per_cluster)
-```
+-> the variability between patients is higher than the variability between cohorts
 
-```{r}
-tumor_type_per_cluster = r_obs %>% 
-  group_by(clusters, tumor_type, batch_patient) %>% 
-  summarise(n=n()) %>% 
-  right_join(patient_cluster) %>% 
-  mutate(n=if_else(is.na(n), 0L, n)) %>% 
-  mutate(fraction=n/cells_per_patient) 
-```
-
-```{r}
-tumor_type_per_cluster %>% 
-    ggplot(aes(x=clusters, y=fraction, fill=tumor_type)) + geom_boxplot() + 
-    scale_fill_brewer(type="qual")
-```
+-> need clinical information for single cell data! 
 
 ```{r}
 

@@ -68,6 +68,20 @@ r_genes.to_csv("results/downstream_analysis/edger/r_genes.csv")
 ## re-import results from R
 
 ```{python}
+dataset_names = {
+    'azizi_peer_2018': "Azizi et al., 2018 (inDrop)",
+    'azizi_peer_2018_10x': "Azizi et al., 2018 (10x)",
+    'guo_zhang_2018': "Guo et al., 2018",
+    'lambrechts_2018_6149_v2': "Lambrechts et al., 2018 (6149)",
+    'lambrechts_2018_6653': "Lambrechts et al., 2018 (6653)",
+    'savas_loi_2018': "Savas et al., 2018", 
+    'zheng_zhang_2017': "C. Zheng et al., 2017",
+    "zheng_bileas_2017": "G. Zheng et al., 2017"
+}
+adata.obs["dataset"] = [dataset_names[d] for d in adata.obs["dataset"]]
+```
+
+```{python}
 cluster_names = {
     "cluster0": "C0 - GZMK",
     "cluster1": "C1 - ZNF683",
@@ -287,6 +301,27 @@ ax.savefig("results/downstream_analysis/go_molecular_function.pdf")
 
 ```{python}
 
+```
+
+## export for analysis in R
+(the labeled adata obs)
+
+```{python}
+r_obs2 = adata.obs
+r_obs2.to_csv("results/downstream_analysis/edger/r_obs2.csv")
+```
+
+```{python}
+adata_all = sc.read_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
+```
+
+```{python}
+adata_all.obs["dataset"] = [dataset_names[d] for d in adata_all.obs["dataset"]]
+```
+
+```{python}
+r_obs_all = adata_all.obs
+r_obs_all.to_csv("results/downstream_analysis/edger/r_obs_all.csv")
 ```
 
 ```{python}

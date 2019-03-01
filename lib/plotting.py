@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
+from collections import OrderedDict
 
 colors = dict()
 colors["dataset"] = {
@@ -14,7 +15,8 @@ colors["dataset"] = {
     "zheng_zhang_2017": '#7f7f7f'
 }
 
-colors["cell_type"] = {'B cell': '#1f77b4',
+colors["cell_type"] = {
+ 'B cell': '#1f77b4',
  'Mast cells': '#ff7f0e',
  'NK cell': '#2ca02c',
  'T cell CD4+': '#d62728',
@@ -26,7 +28,17 @@ colors["cell_type"] = {'B cell': '#1f77b4',
  'unknown': '#7f7f7f'
 }
 
-
+colors["clusters"] = OrderedDict([
+ ('C0 - GZMK', '#e41a1c'),
+ ('C1 - ZNF683', '#377eb8'),
+ ('C2 - exhaustion', '#4daf4a'),
+ ('C3 - ZNF683/chemokine', '#984ea3'),
+ ('C4 - IL7R', '#ff7f00'),
+ ('C5 - mitotic', '#ffff33'),
+ ('C6 - heat shock', '#a65628'),
+ ('C7 - IFIT', '#f781bf'),
+ ('C8 - Immunoglobulin', '#999999')
+])
 
 colors["batch_patient"] = {'azizi_peer_2018_10x_BC09': '#FFFF00',
  'azizi_peer_2018_10x_BC10': '#1CE6FF',

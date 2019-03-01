@@ -21,6 +21,7 @@ import sys
 sys.path.append("lib")
 from jupytertools import setwd
 setwd()
+from collections import Counter
 ```
 
 ```{python}
@@ -61,11 +62,11 @@ resolutions = np.arange(0.005, 0.1, 0.005).tolist() + np.arange(0.1, 0.5, 0.05).
 
 ```{python}
 for r in resolutions:
-    sc.tl.leiden(adata, resolution=r, key_added="leiden_{}".format(r))
+    sc.tl.leiden(adata, resolution=r, key_added="leiden_{:.3f}".format(r))
 ```
 
 ```{python}
-n_clusters = [np.unique(adata.obs["leiden_{}".format(r)].values).size for r in resolutions]    
+n_clusters = [np.unique(adata.obs["leiden_{:.3f}".format(r)].values).size for r in resolutions]    
 ```
 
 ```{python}
@@ -75,10 +76,13 @@ for r, n in zip(resolutions, n_clusters):
 
 ```{python}
 plt.plot(resolutions, n_clusters)
+plt.xlabel("leiden resolution")
+plt.ylabel("#clusters")
+plt.savefig("results/downstream_analysis/n_clusters_resolution.pdf")
 ```
 
 ```{python}
-sc.pl.draw_graph(adata, color=["leiden_{}".format(r) for r in resolutions if r <=0.3], legend_loc="on data", frameon=False)
+sc.pl.draw_graph(adata, color=["leiden_{:.3f}".format(r) for r in resolutions if r <=0.3], legend_loc="on data", frameon=False)
 ```
 
 There seems to be a plateau at ~11 clusters. Notably, below 9 clusters, the big cluster in the middle is not subdivided, which is arguably the most interesting part. Above 11 clusters, the outer clusters are subdivided in even smaller clusters which is arguably irrelevant for us. 
@@ -106,8 +110,8 @@ adata.shape, adata2.shape
 ## re-run PAGA
 
 ```{python}
-sc.tl.paga(adata2, groups="leiden_0.3")
-sc.pl.paga(adata2, threshold=0.05, color="clusters")
+sc.tl.paga(adata2, groups="clusters")
+sc.pl.paga(adata2, threshold=None, color="clusters", frameon=False)
 ```
 
 ```{python}
@@ -115,7 +119,13 @@ sc.tl.draw_graph(adata2, init_pos="paga")
 ```
 
 ```{python}
-sc.pl.draw_graph(adata2, color=["clusters", "HAVCR2", "GZMK", "GZMB", "ZNF683"], legend_loc="on data")
+sc.pl.draw_graph(adata2, color=["clusters", "GZMK", "ZNF683", "HAVCR2",
+                                "ZNF683"], legend_loc="on data")
+```
+
+```{python}
+sc.tl.umap(adata2)
+sc.pl.umap(adata2, color="clusters")
 ```
 
 ```{python}
@@ -140,6 +150,10 @@ sc.tl.dpt(adata3)
 
 ```{python}
 sc.pl.draw_graph(adata3, color="dpt_pseudotime")
+```
+
+```{python}
+
 ```
 
 ```{python}

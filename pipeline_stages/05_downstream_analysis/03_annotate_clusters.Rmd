@@ -28,18 +28,15 @@ from goatools.go_enrichment import GOEnrichmentStudy
 import seaborn as sns
 from plotnine import (
     ggplot, aes, geom_text, geom_point, facet_wrap, facet_grid, 
-    ylim, theme_538, theme_bw, scale_y_reverse, xlim, geom_bar
+    ylim, theme_538, theme_bw, scale_y_reverse, xlim, geom_bar, 
+    scale_color_manual
 )
 import itertools
+from plotting import colors, plot_umap
 ```
 
 ```{python}
 adata = sc.read_h5ad("results/downstream_analysis/adata_cd8_clusters.h5ad")
-```
-
-```{python}
-sc.pl.draw_graph(adata, color=["clusters", "HAVCR2", "GZMK", "GZMB", "ZNF683", "CXCR5", "ENTPD1",
-                               "CXCL13", "PDCD1"], legend_loc="on data", ncols=2)
 ```
 
 ## prepare for DE analysis in R
@@ -71,7 +68,55 @@ r_genes.to_csv("results/downstream_analysis/edger/r_genes.csv")
 ## re-import results from R
 
 ```{python}
-de_genes = pd.read_csv("results/downstream_analysis/edger/de_genes.tsv", sep="\t", index_col=0)
+cluster_names = {
+    "cluster0": "C0 - GZMK",
+    "cluster1": "C1 - ZNF683",
+    "cluster2": "C2 - exhaustion",
+    "cluster3": "C3 - ZNF683/chemokine", # how is it different from 1? 
+    "cluster4": "C4 - IL7R",
+    "cluster5": "C5 - mitotic",
+    "cluster6": "C6 - heat shock",
+    "cluster7": "C7 - IFIT",
+    "cluster8": "C8 - Immunoglobulin"
+}
+colorbrewer = """    #e41a1c
+#377eb8
+#4daf4a
+#984ea3
+#ff7f00
+#ffff33
+#a65628
+#f781bf
+#999999"""
+{
+    cluster: color.strip() for cluster, color in zip(
+        sorted(cluster_names.values()), colorbrewer.strip().split("\n"))
+}
+```
+
+```{python}
+cluster_map = {str(i): c for i, c in enumerate(sorted(cluster_names.values()))}
+adata.obs["clusters"] = [cluster_map[c] for c in adata.obs["clusters"]]
+adata.uns["clusters_colors"] = np.array(list(colors["clusters"].values()))
+```
+
+```{python}
+sc.tl.paga(adata, groups="clusters")
+fig, ax = plt.subplots(figsize=(6, 6))
+sc.pl.paga(adata, threshold=None, color="clusters", frameon=False, ax=ax)
+fig.savefig("results/downstream_analysis/cd8_paga.pdf")
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(9, 8))
+sc.pl.draw_graph(adata, color="clusters", ax=ax, frameon=False, legend_loc="on data", 
+                 legend_fontsize=12, size=8)
+fig.savefig("results/downstream_analysis/cd8_paga_fa.jpg", quality=100, dpi=300)
+```
+
+```{python}
+de_genes = pd.read_csv("results/downstream_analysis/edger/de_genes.tsv", sep="\t", index_col=0).\
+    assign(cluster = lambda X: [cluster_names[x] for x in X["cluster"]])
 clusters = np.unique(de_genes["cluster"].values)
 ```
 
@@ -82,26 +127,42 @@ de_genes_pos = de_genes_pos.groupby("cluster")\
     .reset_index(drop=True)
 ```
 
+```{python}
+de_genes_count = de_genes_pos.query("FDR < 0.001").groupby("cluster").count().reset_index().\
+    assign(label = lambda x: ["n=" + str(l) for l in x["rank"]])
+```
+
 ### most-DE genes
 
 ```{python}
-(
+tmp_plt = (
     ggplot(de_genes_pos.loc[de_genes_pos["rank"] <= 10, :],
-       aes(x="logFC", y="rank", label="'   ' + gene_symbol")) +
-     geom_text(angle=0, ha="left", size=6) +
-     geom_point(color="black") + 
+       aes(x="logFC", y="rank")) +
+     geom_text(aes(label="'   ' + gene_symbol"), angle=0, ha="left", size=6) +
+     geom_point(aes(color="cluster")) + 
+     geom_text(aes(label="label", x=5, y=10), data=de_genes_count, ha="right", size=8) + 
      facet_wrap(' ~ cluster') + 
     theme_bw() + 
     scale_y_reverse(limits=(10, .5)) + 
-    xlim(0, 5)
+    xlim(0, 5) + 
+    scale_color_manual(list(colors["clusters"].values()), guide=False) 
 )
+tmp_plt.save("results/downstream_analysis/edger/de_top_genes.pdf", width=18, height=14, units='cm', dpi=300)
+tmp_plt
 ```
 
-### Number of DE genes
-at FDR = 0.001
-
 ```{python}
-ggplot(de_genes_pos[de_genes_pos["FDR"] < 0.001], aes(x="cluster")) + geom_bar()
+genes = iter(["GZMK", "ZNF683", "HAVCR2", "GZMB", "IL7R", 
+         "STMN1", "HSPA6", "IFIT3"])
+fig, axs = plt.subplots(2, 4, figsize=(14, 6))
+for row in axs:
+    for ax in row:
+        gene = next(genes)
+        plot_umap(adata, rep="X_draw_graph_fa", color=gene, ax=ax, title=gene, size=0.2)
+        ax.axis("off")
+
+plt.colorbar(axs[0, 0].collections[0], ax=axs[:, 3], use_gridspec=True, fraction=0.05)
+fig.savefig("results/downstream_analysis/gene_expr_fa.jpg", quality=100, dpi=300)
 ```
 
 ```{python}
@@ -179,28 +240,49 @@ goea_table
 
 ```{python}
 go_tab_fil = goea_table[(goea_table["go_namespace"] == "biological_process")]
-```
-
-```{python}
 go_tab_fil = go_tab_fil.assign(log_p = -np.log10(go_tab_fil['p']))
-```
-
-```{python}
 go_tab_pivot = go_tab_fil[["cluster", "go", "go_name", "log_p"]].pivot_table(index=["go", "go_name"], columns="cluster")
-```
-
-```{python}
+go_tab_pivot.columns = [c for _, c in go_tab_pivot.columns]
 # the N most enriched terms for each cluster
 top_go = [go_tab_fil.loc[(go_tab_fil["cluster"] == cluster) & 
                          (go_tab_fil["fdr"] < 0.01), :]\
                               .sort_values("fdr")["go"].tolist()[:5] 
           for cluster in clusters]
 top_go = set(go for go_list in top_go for go in go_list)
+
 ```
 
 ```{python}
-sns.clustermap(go_tab_pivot[go_tab_pivot.index.get_level_values('go').isin(top_go)],
-              col_cluster=True, figsize=(7, 10), metric="euclidean")
+ax = sns.clustermap(go_tab_pivot[go_tab_pivot.index.get_level_values('go').isin(top_go)],
+              col_cluster=False, figsize=(4, 9), metric="correlation")
+ax.ax_heatmap.xaxis.set_ticks_position('top')
+ax.ax_heatmap.xaxis.set_ticklabels(ax.ax_heatmap.xaxis.get_ticklabels(), rotation=90)
+ax.ax_heatmap.set_ylabel(None)
+# ax.tight_layout()
+ax.savefig("results/downstream_analysis/go_biological_process.pdf")
+```
+
+```{python}
+go_tab_fil = goea_table[(goea_table["go_namespace"] == "molecular_function")]
+go_tab_fil = go_tab_fil.assign(log_p = -np.log10(go_tab_fil['p']))
+go_tab_pivot = go_tab_fil[["cluster", "go", "go_name", "log_p"]].pivot_table(index=["go", "go_name"], columns="cluster")
+go_tab_pivot.columns = [c for _, c in go_tab_pivot.columns]
+# the N most enriched terms for each cluster
+top_go = [go_tab_fil.loc[(go_tab_fil["cluster"] == cluster) & 
+                         (go_tab_fil["fdr"] < 0.01), :]\
+                              .sort_values("fdr")["go"].tolist()[:5] 
+          for cluster in clusters]
+top_go = set(go for go_list in top_go for go in go_list)
+
+```
+
+```{python}
+ax = sns.clustermap(go_tab_pivot[go_tab_pivot.index.get_level_values('go').isin(top_go)],
+              col_cluster=False, figsize=(4, 8), metric="correlation")
+ax.ax_heatmap.xaxis.set_ticks_position('top')
+ax.ax_heatmap.set_ylabel(None)
+ax.ax_heatmap.xaxis.set_ticklabels(ax.ax_heatmap.xaxis.get_ticklabels(), rotation=90)
+ax.savefig("results/downstream_analysis/go_molecular_function.pdf")
 ```
 
 ```{python}

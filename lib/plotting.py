@@ -93,12 +93,16 @@ def make_legend_elements(color_key):
     return res
 
 
-def plot_umap(adata, ax, title="umap", size=0.01, rep="X_umap", color="dataset"):
-    assert np.all([x in colors[color] for x in np.unique(adata.obs[color].values)]), \
-        "the color map contains a color for each distinct value"
-    color_vec = [colors[color][x] for x in adata.obs[color].values]
+def plot_umap(adata, ax, title="umap", size=0.01, rep="X_umap", color="dataset", **kwargs):
+    if color in adata.raw.var_names:
+        color_vec = adata.raw.X[:, adata.raw.var_names == color].toarray().flatten()
+        color_vec = (color_vec - np.min(color_vec))/np.ptp(color_vec)
+    else:
+        assert np.all([x in colors[color] for x in np.unique(adata.obs[color].values)]), \
+            "the color map contains a color for each distinct value"
+        color_vec = np.array([colors[color][x] for x in adata.obs[color].values])
     ax.scatter(adata.obsm[rep][:, 0], adata.obsm[rep][:, 1], s=size,
-            c=color_vec, marker='.')
+            c=color_vec, marker='.', **kwargs)
     ax.set_xlabel("UMAP1")
     ax.set_xticks([])
     ax.set_ylabel("UMAP2")

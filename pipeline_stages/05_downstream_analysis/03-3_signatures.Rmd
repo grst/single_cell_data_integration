@@ -33,7 +33,16 @@ from plotnine import (
     ylim, theme_538, theme_bw, scale_y_reverse, xlim, geom_bar
 )
 import itertools
+from plotting import colors, names
+from pygenesig.gini import GiniSignatureGenerator, gini
+from pygenesig.mcp_counter import MCPSignatureGenerator, MCPSignatureTester
+from pygenesig.tools import translate_signatures, collapse_matrix, jaccard_ind, jaccard_mat
+from pygenesig.bioqc import BioQCSignatureTester
+from pygenesig.visualization import aggregate_scores, plot_score_heatmap
+from collections import Counter, OrderedDict
 ```
+
+# import data
 
 ```{python}
 adata_all = sc.read_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
@@ -44,7 +53,14 @@ adata = sc.read_h5ad("results/downstream_analysis/adata_cd8_clusters.h5ad")
 ```
 
 ```{python}
-adata_all.obs_names
+cluster_names = names["cluster"]
+de_genes = pd.read_csv("results/downstream_analysis/edger/de_genes.tsv", sep="\t", index_col=0).\
+    assign(cluster = lambda X: [cluster_names[x] for x in X["cluster"]])
+clusters = np.unique(de_genes["cluster"].values)
+de_genes_pos = de_genes.loc[de_genes["logFC"] > 0, :]
+de_genes_pos = de_genes_pos.groupby("cluster")\
+    .apply(lambda df: df.assign(rank=df["logFC"].rank(ascending=False)))\
+    .reset_index(drop=True)
 ```
 
 ```{python}
@@ -52,7 +68,13 @@ adata_all.obs["cell_subtype"] = adata_all.obs["cell_type"].tolist()
 ```
 
 ```{python}
-adata_all.obs.loc[adata.obs_names, "cell_subtype"] = adata.obs["clusters"].tolist()
+cluster_names2 = {
+    c[-1]: n for c, n in names["cluster"].items()
+}
+```
+
+```{python}
+adata_all.obs.loc[adata.obs_names, "cell_subtype"] = [cluster_names2[i] for i in adata.obs["clusters"].tolist()]
 ```
 
 ```{python}
@@ -64,98 +86,270 @@ sc.pl.umap(adata_all, color="cell_subtype", legend_loc="on data")
 ```
 
 ```{python}
-from pygenesig.gini import GiniSignatureGenerator
-from pygenesig.mcp_counter import MCPSignatureGenerator
-from pygenesig.tools import translate_signatures, collapse_matrix
+adata_sub = sc.pp.subsample(adata_all, n_obs=2000, copy=True)
 ```
+
+## function definitions
 
 ```{python}
+def _robust_mean(series):
+    series.values.sort()
+    n = series.size
+    min_cutoff = int(np.round(.1 * n))
+    max_cutoff = int(np.round(.9 * n))
+    return np.mean(series.values[min_cutoff:max_cutoff])
 
+robust_mean = lambda df: df.apply(lambda k: _robust_mean(k), axis=1)
+percentile_fun = lambda df: df.apply(lambda k: np.percentile(k, 66), axis=1)
+
+def heatmap_precision(heatmap, reference="all"):
+    """calculate precision score fore each row of aggregated heatmap. """
+    precision = OrderedDict()
+    if reference == "within":
+        # only compare to other T cell subclusters
+        heatmap = heatmap.loc[:, clusters]
+    for signature in heatmap.index: 
+        if reference == "outside":
+            # only compare to other cell types than T cells
+            tmp_heatmap = heatmap.loc[:, ~heatmap.columns.isin(set(clusters) - set(signature))]
+        row_series = heatmap.loc[signature, :]
+        precision[signature] = row_series[signature]/np.sum(row_series)
+        
+    return precision
 ```
+
+## prepare data for pygenesig
 
 ```{python}
 target = np.array(adata_all.obs["cell_subtype"].tolist())
-expr = adata_all.raw.X[:, adata_all.raw.var_names.isin(adata_all.var_names)].T.toarray()
+# expr = adata_all.raw.X[:, adata_all.raw.var_names.isin(adata_all.var_names)].T.toarray()
+expr = adata_all.raw.X[:, :].T.toarray()
+expr_sub = adata_sub.raw.X.T.toarray()
+target_sub = np.array(adata_sub.obs["cell_subtype"].tolist())
 ```
 
 ```{python}
-percentile_fun = lambda df: df.apply(lambda k: np.percentile(k, 66), axis=1)
+assert (adata_sub.raw.var_names == adata_all.raw.var_names).all()
 ```
 
 ```{python}
-sg = GiniSignatureGenerator(expr, target, min_expr=.5, max_rk=3,
-                            min_gini=.7, aggregate_fun=percentile_fun)
-gini_sig = sg.mk_signatures()
+rosetta = {i : g for i, g in enumerate(adata_all.raw.var_names)}
+rosetta_inv = {g : i for i, g in enumerate(adata_all.raw.var_names)}
+```
+
+### compute gini
+
+```{python}
+df_aggr = collapse_matrix(expr, target, axis=1, aggregate_fun=robust_mean)
 ```
 
 ```{python}
-# sg_mcp = MCPSignatureGenerator(adata_all.X.T, target, min_fc=1.25, min_sfc=1.25, min_auc=.8)
-# mcp_sig = sg_mcp.mk_signatures()
+df_gini = df_aggr.apply(gini, axis=1)
+df_gini = pd.DataFrame().assign(gini=df_gini, gene_symbol=adata_all.raw.var_names).set_index("gene_symbol")
+```
+
+# Sandbox
+
+
+### gini + DE
+
+```{python}
+sig_scores = df_gini.join(de_genes_pos.set_index("gene_symbol"), how="inner")
 ```
 
 ```{python}
-gini_sig_trans = translate_signatures(gini_sig, {i: s for i, s in enumerate(adata_all.var_names)})
+sig_scores = sig_scores.query("gini > 0.7 & FDR < 0.001 & logFC > 0")
 ```
 
 ```{python}
-gini_sig_trans
+display(sig_scores.sort_values("cluster"), n=10)
 ```
 
 ```{python}
-sc.pl.umap(adata_all, color=["TRAV12-2", "IL7R", "GZMK", "ZNF683", "MTRNR2L12"], ncols=2)
+sig_gini_de = {c: list() for c in np.unique(sig_scores.cluster.values)}
+for gene, cluster in zip(sig_scores.index, sig_scores.cluster):
+    sig_gini_de[cluster].append(gene)
 ```
 
 ```{python}
-sc.pl.draw_graph(adata, color=["clusters", "TIGIT", "CD96", "ZNF683", "TRAV12-2",
-                               "IL7R", "TCF7", "MTRNR2L12", "CMC1"], legend_loc="on data", ncols=2)
+for s, genes in sig_gini_de.items():
+    print(s, genes)
 ```
 
 ```{python}
-from pygenesig.mcp_counter import MCPSignatureTester
-st = MCPSignatureTester(expr, target)
-score_matrix = st.score_signatures(gini_sig)
+sig_gini_de_ind = translate_signatures(sig_gini_de, rosetta_inv)
 ```
 
 ```{python}
-from pygenesig.visualization import aggregate_scores, plot_score_heatmap
-sig_labels = st.sort_signatures(gini_sig)
-heatmap = aggregate_scores(sig_labels, score_matrix, target)
-plot_score_heatmap(heatmap, clip=None)
+sns.heatmap(jaccard_mat(sig_gini_de_ind, sig_gini_de_ind).pivot(index="set_1", columns="set_2", values="jaccard index"))
+```
+
+## standard gini
+
+```{python}
+sg = GiniSignatureGenerator(expr, target, min_gini=.5, max_rk=3, min_expr=0, aggregate_fun=robust_mean)
+rogini = sg.get_rogini_format()
 ```
 
 ```{python}
-de_genes = pd.read_csv("results/downstream_analysis/edger/de_genes.tsv", sep="\t", index_col=0)
-clusters = np.unique(de_genes["cluster"].values)
+rogini_fil = rogini.query("GINI_IDX > .5 & VALUE > .25 & RANKING <= 3")\
+        .sort_values("CATEGORY")
 ```
 
 ```{python}
-top10 = {
-    c: de_genes.loc[de_genes["cluster"] == c,:].sort_values("logFC", ascending=False)["gene_symbol"].tolist()[:10]
-        for c in clusters
+sig_gini_ind = {
+    c : list() for c in cluster_names.values()
 }
+for gene_id, c in zip(rogini_fil["GENEID"], rogini_fil["CATEGORY"]): 
+    try:
+        sig_gini_ind[c].append(gene_id)
+    except KeyError:
+        pass
+translate_signatures(sig_gini_ind, rosetta)
+```
+
+### gini on clusters only
+
+```{python}
+mask = np.isin(target, list(cluster_names.values()))
 ```
 
 ```{python}
-top10_t = translate_signatures(top10, rosetta={
-    sym : i for i, sym in enumerate(adata_all.var_names.tolist())
-}, ignore_missing=True)
+sg2 = GiniSignatureGenerator(expr[:, mask], target[mask], min_gini=.5, max_rk=3, min_expr=0, aggregate_fun=robust_mean)
+rogini2 = sg2.get_rogini_format()
 ```
 
 ```{python}
-score_matrix = st.score_signatures(top10_t)
+rogini2_fil = rogini2.query("GINI_IDX > .5 & VALUE > .25 & RANKING <= 1")\
+        .sort_values("CATEGORY")
+
 ```
 
 ```{python}
-from pygenesig.visualization import aggregate_scores, plot_score_heatmap
-sig_labels = st.sort_signatures(gini_sig)
-heatmap = aggregate_scores(top10_t.keys(), score_matrix, target)
+sig_gini2_ind = {
+    c : list() for c in cluster_names.values()
+}
+for gene_id, c in zip(rogini2_fil["GENEID"], rogini2_fil["CATEGORY"]): 
+    try:
+        sig_gini2_ind[c].append(gene_id)
+    except KeyError:
+        pass
+translate_signatures(sig_gini2_ind, rosetta)
+```
+
+## double gini
+
+```{python}
+double_rogini = rogini2_fil.set_index(["GENEID", "CATEGORY"])\
+    .join(rogini_fil.set_index(["GENEID", "CATEGORY"]), how="inner", lsuffix="_2", rsuffix="_1")\
+    .reset_index(drop=False)\
+    .sort_values("CATEGORY")
+```
+
+```{python}
+sig_doublegini_ind = {
+    c : list() for c in cluster_names.values()
+}
+for gene_id, c in zip(double_rogini["GENEID"], double_rogini["CATEGORY"]): 
+    try:
+        sig_doublegini_ind[c].append(gene_id)
+    except KeyError:
+        pass
+translate_signatures(sig_doublegini_ind, rosetta)
+```
+
+# signature testing
+
+```{python}
+mcpt = MCPSignatureTester(expr_sub, target_sub)
+bioqct = BioQCSignatureTester(expr_sub, target_sub)
+```
+
+## gini + DE
+
+```{python}
+score_matrix = bioqct.score_signatures(sig_gini_de_ind)
+```
+
+```{python}
+sig_labels = bioqct.sort_signatures(sig_gini_de_ind)
+heatmap = aggregate_scores(sig_labels, score_matrix, target_sub)
+plot_score_heatmap(heatmap, clip=30)
+```
+
+```{python}
+heatmap_precision(heatmap),\
+heatmap_precision(heatmap, reference="within"),\
+heatmap_precision(heatmap, reference="outside")
+```
+
+## standard gini
+
+```{python}
+score_matrix = mcpt.score_signatures(sig_gini_ind)
+```
+
+```{python}
+sig_labels = bioqct.sort_signatures(sig_gini_ind)
+heatmap = aggregate_scores(sig_labels, score_matrix, target_sub)
 plot_score_heatmap(heatmap, clip=None)
 ```
 
 ```{python}
-cols = [list(l) for l in [*zip(*[[c, g] for c, genes in gini_sig_trans.items() 
-                              for g in genes])]]
-pd.DataFrame().assign(ct=cols[0], gene=cols[1]).to_csv("results/downstream_analysis/gini_sig.csv")
+heatmap_precision(heatmap),\
+heatmap_precision(heatmap, reference="within"),\
+heatmap_precision(heatmap, reference="outside")
+```
+
+## standard gini on clusters only
+
+```{python}
+score_matrix = mcpt.score_signatures(sig_gini2_ind)
+```
+
+```{python}
+sig_labels = bioqct.sort_signatures(sig_gini_ind)
+heatmap = aggregate_scores(sig_labels, score_matrix, target_sub)
+plot_score_heatmap(heatmap, clip=None)
+```
+
+```{python}
+heatmap_precision(heatmap),\
+heatmap_precision(heatmap, reference="within"),\
+heatmap_precision(heatmap, reference="outside")
+```
+
+## double gini
+
+```{python}
+score_matrix = mcpt.score_signatures(sig_doublegini_ind)
+```
+
+```{python}
+sig_labels = bioqct.sort_signatures(sig_doublegini_ind)
+heatmap = aggregate_scores(sig_labels, score_matrix, target_sub)
+plot_score_heatmap(heatmap, clip=1.5)
+```
+
+```{python}
+heatmap_precision(heatmap),\
+heatmap_precision(heatmap, reference="within"),\
+heatmap_precision(heatmap, reference="outside")
+```
+
+## export signatures
+
+```{python}
+def as_tidy(sig_dict):
+    for c, genes in sig_dict.items():
+        for g in genes:
+            yield c, g
+```
+
+```{python}
+sig_df = pd.DataFrame.from_records(as_tidy(translate_signatures(sig_doublegini_ind, rosetta)))
+sig_df.columns = ["cluster", "gene_symbol"]
+sig_df.to_csv("results/downstream_analysis/gini_sig.csv", index=False)
 ```
 
 ```{python}

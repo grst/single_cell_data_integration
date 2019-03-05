@@ -18,7 +18,9 @@ import scanpy.api as sc
 import numpy as np
 from matplotlib import pyplot as plt
 import sys
+import os
 sys.path.append("lib")
+sys.path.append(os.path.abspath("."))
 from jupytertools import setwd, display
 setwd()
 from goatools.base import download_go_basic_obo, download_ncbi_associations
@@ -32,7 +34,7 @@ from plotnine import (
     scale_color_manual
 )
 import itertools
-from plotting import colors, plot_umap
+from plotting import colors, plot_umap, names
 ```
 
 ```{python}
@@ -56,59 +58,24 @@ import scipy.io
 ```
 
 ```{python}
-scipy.io.mmwrite("results/downstream_analysis/edger/r_mat.mtx", r_mat)
+# scipy.io.mmwrite("results/downstream_analysis/edger/r_mat.mtx", r_mat)
 ```
 
 ```{python}
-# np.savetxt("results/downstream_analysis/edger/r_mat.csv", r_mat)
-r_obs.to_csv("results/downstream_analysis/edger/r_obs.csv")
-r_genes.to_csv("results/downstream_analysis/edger/r_genes.csv")
+# # np.savetxt("results/downstream_analysis/edger/r_mat.csv", r_mat)
+# r_obs.to_csv("results/downstream_analysis/edger/r_obs.csv")
+# r_genes.to_csv("results/downstream_analysis/edger/r_genes.csv")
 ```
 
 ## re-import results from R
 
 ```{python}
-dataset_names = {
-    'azizi_peer_2018': "Azizi et al., 2018 (inDrop)",
-    'azizi_peer_2018_10x': "Azizi et al., 2018 (10x)",
-    'guo_zhang_2018': "Guo et al., 2018",
-    'lambrechts_2018_6149_v2': "Lambrechts et al., 2018 (6149)",
-    'lambrechts_2018_6653': "Lambrechts et al., 2018 (6653)",
-    'savas_loi_2018': "Savas et al., 2018", 
-    'zheng_zhang_2017': "C. Zheng et al., 2017",
-    "zheng_bileas_2017": "G. Zheng et al., 2017"
-}
+dataset_names = names["dataset"]
 adata.obs["dataset"] = [dataset_names[d] for d in adata.obs["dataset"]]
 ```
 
 ```{python}
-cluster_names = {
-    "cluster0": "C0 - GZMK",
-    "cluster1": "C1 - ZNF683",
-    "cluster2": "C2 - exhaustion",
-    "cluster3": "C3 - ZNF683/chemokine", # how is it different from 1? 
-    "cluster4": "C4 - IL7R",
-    "cluster5": "C5 - mitotic",
-    "cluster6": "C6 - heat shock",
-    "cluster7": "C7 - IFIT",
-    "cluster8": "C8 - Immunoglobulin"
-}
-colorbrewer = """    #e41a1c
-#377eb8
-#4daf4a
-#984ea3
-#ff7f00
-#ffff33
-#a65628
-#f781bf
-#999999"""
-{
-    cluster: color.strip() for cluster, color in zip(
-        sorted(cluster_names.values()), colorbrewer.strip().split("\n"))
-}
-```
-
-```{python}
+cluster_names = names["cluster"]
 cluster_map = {str(i): c for i, c in enumerate(sorted(cluster_names.values()))}
 adata.obs["clusters"] = [cluster_map[c] for c in adata.obs["clusters"]]
 adata.uns["clusters_colors"] = np.array(list(colors["clusters"].values()))
@@ -166,6 +133,10 @@ tmp_plt
 ```
 
 ```{python}
+sc.pl.draw_graph(adata, color=["IFNG", "TNF", "IL2"])
+```
+
+```{python}
 genes = iter(["GZMK", "ZNF683", "HAVCR2", "GZMB", "IL7R", 
          "STMN1", "HSPA6", "IFIT3"])
 fig, axs = plt.subplots(2, 4, figsize=(14, 6))
@@ -219,7 +190,7 @@ goaeobj = GOEnrichmentStudy(
     r_genes["gene_symbol"].tolist(), # list of background genes 
     geneid2gos, 
     obodag, 
-    propagate_counts = True, # propagate counts to parent terms
+    propagate_counts = False, # propagate counts to parent terms
     alpha = 0.01,
     methods = ['fdr_bh']
 )
@@ -292,7 +263,7 @@ top_go = set(go for go_list in top_go for go in go_list)
 
 ```{python}
 ax = sns.clustermap(go_tab_pivot[go_tab_pivot.index.get_level_values('go').isin(top_go)],
-              col_cluster=False, figsize=(4, 8), metric="correlation")
+              col_cluster=False, figsize=(4, 6.5), metric="correlation")
 ax.ax_heatmap.xaxis.set_ticks_position('top')
 ax.ax_heatmap.set_ylabel(None)
 ax.ax_heatmap.xaxis.set_ticklabels(ax.ax_heatmap.xaxis.get_ticklabels(), rotation=90)

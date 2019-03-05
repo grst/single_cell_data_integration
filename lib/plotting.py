@@ -3,6 +3,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 from collections import OrderedDict
 
+
 colors = dict()
 colors["dataset"] = {
     "azizi_peer_2018": '#1f77b4',
@@ -14,6 +15,7 @@ colors["dataset"] = {
     "zheng_bileas_2017": '#e377c2',
     "zheng_zhang_2017": '#7f7f7f'
 }
+
 
 colors["cell_type"] = {
  'B cell': '#1f77b4',
@@ -28,6 +30,7 @@ colors["cell_type"] = {
  'unknown': '#7f7f7f'
 }
 
+
 colors["clusters"] = OrderedDict([
  ('C0 - GZMK', '#e41a1c'),
  ('C1 - ZNF683', '#377eb8'),
@@ -39,6 +42,7 @@ colors["clusters"] = OrderedDict([
  ('C7 - IFIT', '#f781bf'),
  ('C8 - Immunoglobulin', '#999999')
 ])
+
 
 colors["batch_patient"] = {'azizi_peer_2018_10x_BC09': '#FFFF00',
  'azizi_peer_2018_10x_BC10': '#1CE6FF',
@@ -80,6 +84,33 @@ colors["batch_patient"] = {'azizi_peer_2018_10x_BC09': '#FFFF00',
  'zheng_zhang_2017_P0508': '#013349',
  'zheng_zhang_2017_P1116': '#00846F',
  'zheng_zhang_2017_P1202t': '#372101'}
+
+
+names = dict()
+names["dataset"] = {
+    'azizi_peer_2018': "Azizi et al., 2018 (inDrop)",
+    'azizi_peer_2018_10x': "Azizi et al., 2018 (10x)",
+    'guo_zhang_2018': "Guo et al., 2018",
+    'lambrechts_2018_6149_v2': "Lambrechts et al., 2018 (6149)",
+    'lambrechts_2018_6653': "Lambrechts et al., 2018 (6653)",
+    'savas_loi_2018': "Savas et al., 2018", 
+    'zheng_zhang_2017': "C. Zheng et al., 2017",
+    "zheng_bileas_2017": "G. Zheng et al., 2017"
+}
+
+
+names["cluster"] = {
+    "cluster0": "C0 - GZMK",
+    "cluster1": "C1 - ZNF683",
+    "cluster2": "C2 - exhaustion",
+    "cluster3": "C3 - ZNF683/chemokine", # how is it different from 1? 
+    "cluster4": "C4 - IL7R",
+    "cluster5": "C5 - mitotic",
+    "cluster6": "C6 - heat shock",
+    "cluster7": "C7 - IFIT",
+    "cluster8": "C8 - Immunoglobulin"
+}
+
 
 
 def make_legend_elements(color_key):

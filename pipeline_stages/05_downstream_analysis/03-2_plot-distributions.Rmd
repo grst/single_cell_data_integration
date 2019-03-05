@@ -20,11 +20,16 @@ library(ggplot2)
 library(cowplot)
 library(dbplyr)
 library(tidyr)
+library(tibble)
 conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
 library(RSQLite)
 library(ggpubr)
 library(ggbeeswarm)
+library(stringr)
 library(cowplot)
+library(ppcor)
+library(ggcorrplot)
 conflict_prefer("ggsave", "cowplot")
 # library(ggpubr)
 fig_size = function(width, height) options(repr.plot.width = width, repr.plot.height = height)
@@ -92,9 +97,11 @@ cd8_infil_tcga = infiltration %>%
 ```{r}
 p = cd8_infil_tcga %>% 
     ggplot(aes(x = cohort, y=fraction)) + 
-        geom_quasirandom(aes(color=cohort)) + 
-        scale_color_manual(values=colors, guide=FALSE) + 
-        xlab("tumor type")
+        geom_quasirandom(color="grey") + 
+        # scale_color_manual(values=colors, guide=FALSE) + 
+        xlab("tumor type") + 
+        ylab("proportion CD8+") + 
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 p_tcga = p %>%
         ggadd("median_mad", color="black") + coord_cartesian(ylim=c(0, 1))
 ```
@@ -102,7 +109,8 @@ p_tcga = p %>%
 ```{r}
 count_cd8 = r_obs %>% group_by(tumor_type, batch_patient) %>% summarise(n_cd8=n())
 count_all = r_obs_all %>% filter(
-    cell_type %in% c("T cell CD8+", "T cell CD4+", "T cell reg.")
+    cell_type %in% c("T cell CD8+", "T cell CD4+", "T cell reg."),
+    origin %in% c("tumor_primary", "tumor_edge")
 ) %>% group_by(tumor_type, dataset, batch_patient) %>% summarise(n=n())
 cd8_infil_sc = count_cd8 %>% inner_join(count_all) %>% 
     mutate(fraction=n_cd8/n)
@@ -119,27 +127,32 @@ cd8_infil_sc %>%
 ```{r}
 p = cd8_infil_sc %>% 
     ggplot(aes(x = tumor_type, y=fraction)) + 
-                    geom_quasirandom(aes(color=tumor_type)) + 
-                    scale_color_manual(values=colors, guide=FALSE) + 
+                    geom_quasirandom(aes(color=dataset)) + 
+                    scale_color_brewer(type="qual", palette="Set1") + 
+                    # scale_color_manual(values=colors, guide=FALSE) + 
                      coord_cartesian(ylim=c(0, 1)) + 
                      stat_compare_means(method="wilcox",
                                         label.y=c(.95, .85, .75),
                                            comparisons=list(c("BRCA", "LIHC"),
                                                             c("BRCA", "NSCLC"),
                                                             c("LIHC", "NSCLC"))) + 
-                    xlab("tumor type")
+                    xlab("tumor type") + 
+                    ylab("proportion CD8+") + 
+                    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 p_sc = p %>% ggadd("median_mad", color="black")
 ```
 
 ```{r}
-fig_size(7, 3)
-plot_grid(p_sc, p_tcga, nrow=1, align="v", rel_widths=c(4,5))
-ggsave("../../results/downstream_analysis/cd8_ratio.pdf", width = 7, height = 3)
+fig_size(8, 3)
+plot_grid(p_sc, p_tcga, nrow=1, align="v", rel_widths=c(10,5), labels=c("A", "B"))
+ggsave("../../results/downstream_analysis/cd8_ratio.pdf", width = 8, height = 3)
 ```
 
 Lung has few CD8+ T cells. This is consistent with estimates based on TCGA data. 
 (-> compute the fraction of CD8+ T cells compared to other cells in tumor_primary samples) 
+
+**This whole figure does not make sense! Some studies FACS sorted for CD4/CD8 T cells completely distorting  the ratio! **
 
 
 ## absolute cluster size
@@ -152,6 +165,34 @@ scale_fill_manual(values=colors) +
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
         coord_flip() + 
     xlab("cluster")
+```
+
+```{r}
+fig_size(3, 2.5)
+r_obs %>% 
+  mutate(cluster_short = str_sub(clusters, 1, 2)) %>% 
+  mutate(cluster_short = factor(cluster_short, levels=sort(unique(cluster_short), decreasing = TRUE))) %>% 
+    ggplot(aes(x=cluster_short, fill=clusters)) + 
+  geom_bar() +
+scale_fill_manual(values=colors_cluster, guide=FALSE) + 
+    theme(axis.text.x = element_blank(),,
+          line=element_blank()) +
+    geom_text(y=100, stat='count', aes(label=..count..), rotation=90, hjust=0) + 
+    xlab(NULL) + 
+    coord_flip() + 
+    ylab("cluster size")
+
+ggsave("../../results/downstream_analysis/cluster_size.pdf", width = 3, height = 2.5)
+```
+
+```{r}
+fig_size(3, 2.5)
+r_obs %>% 
+  group_by(clusters) %>% 
+  summarise(n=n()) %>%
+  ungroup() %>%
+  mutate(frac=n/sum(n))
+ 
 ```
 
 ```{r}
@@ -188,30 +229,77 @@ cluster_count_per_patient %>% select(batch_patient, tumor_type, clusters1 = clus
         scale_color_manual(values=colors) + 
         stat_smooth(method="lm") +
         coord_cartesian(ylim=c(0, max(cluster_count_per_patient$fraction))) + 
-        stat_cor(method="spearman")
+        stat_cor(method="pearson")
+```
+
+### partial correlations
+
+```{r}
+clusters_for_correlation = cluster_count_per_patient %>% select(batch_patient, clusters, fraction) %>% 
+    spread(clusters, fraction) %>% as.data.frame() %>%
+    column_to_rownames("batch_patient")
+
+cluster_pcor = clusters_for_correlation %>% pcor(method="spearman")
+cluster_cor = clusters_for_correlation %>% cor(method="spearman")
 ```
 
 ```{r}
-# cluster_count_per_patient %>% 
-#     ggplot(aes(x=batch_patient, y=fraction, fill=clusters)) + 
-#     facet_grid(~tumor_type, drop=TRUE, space="free") +
-#     geom_bar(stat="identity", position="stack") + 
-#     scale_fill_manual(values=colors_cluster)
+fig_size(5, 4 )
+ggcorrplot(cluster_cor)
 ```
 
 ```{r}
-fig_size(14, 4)
+ggcorrplot(cluster_pcor$estimate)
+```
+
+```{r}
+ggcorrplot(cluster_pcor$p.value < 0.05)
+```
+
+```{r}
+cohorts = c("BRCA", "LIHC", "LUAD", "LUSC")
+tcga_expr = tbl(tcga_db, "expression") %>% 
+    inner_join(tbl(tcga_db, "sample")) %>% 
+    filter(cohort %in% cohorts) %>%
+    filter(gene_symbol %in% c("HAVCR2", "ZNF683", "CD8A", "CD8B")) %>%
+    filter(sample_type == "TP") %>% 
+    select(cohort, sample, gene_symbol, log2_tpm) %>%
+    collect()
+```
+
+```{r}
+expr_mat = tcga_expr %>% spread(gene_symbol, log2_tpm) %>% select(-cohort) %>% 
+    as.data.frame() %>% column_to_rownames("sample") 
+```
+
+```{r}
+expr_mat %>% ggplot(aes(x=HAVCR2/CD8A, y=ZNF683/CD8A)) + geom_point() + stat_cor() + stat_smooth(method='lm')
+```
+
+```{r}
+ggcorrplot(pcor(expr_mat)$estimate)
+```
+
+```{r}
+fig_size(11, 4)
 p = cluster_count_per_patient %>% 
+    mutate(cluster_name = str_replace_all(clusters, " - ", "\n")) %>% 
     ggplot(aes(x=tumor_type, y=fraction, color=tumor_type)) + 
-    facet_wrap(~clusters, nrow=1) + geom_quasirandom() + 
-    scale_color_manual(values=colors) + 
+    facet_wrap(~cluster_name, nrow=1) + geom_quasirandom() + 
+    scale_color_manual(values=colors, guide=FALSE) + 
     stat_compare_means(method="wilcox",
                                         label.y=c(.95, .85, .75),
                                            comparisons=list(c("BRCA", "LIHC"),
                                                             c("BRCA", "NSCLC"),
-                                                            c("LIHC", "NSCLC")))
+                                                            c("LIHC", "NSCLC"))) + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+          strip.text = element_text(size=9)) + 
+    coord_cartesian(ylim=c(0,1)) + 
+    xlab(NULL)
 
 p %>% ggadd("median_mad", color="black")
+
+ggsave("../../results/downstream_analysis/cluster_distribution.pdf", width = 11, height = 4)
 ```
 
 -> the variability between patients is higher than the variability between cohorts

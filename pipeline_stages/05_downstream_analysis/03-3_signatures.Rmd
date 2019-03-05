@@ -89,6 +89,10 @@ sc.pl.umap(adata_all, color="cell_subtype", legend_loc="on data")
 adata_sub = sc.pp.subsample(adata_all, n_obs=2000, copy=True)
 ```
 
+```{python}
+from scanpy.plotting._anndata import _prepare_dataframe
+```
+
 ## function definitions
 
 ```{python}

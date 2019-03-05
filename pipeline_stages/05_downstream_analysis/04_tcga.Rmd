@@ -56,6 +56,12 @@ indications = tbl(tcga_db, "cohort") %>% pull(cohort)
 ```{r}
 cohorts = c("LIHC", "LUSC", "LUAD", "BRCA")
 # cohorts = c("SKCM")
+cohort_colors = c(
+    "BRCA"="#7fc97f",
+    "LIHC"="#beaed4",
+    "LUAD"="#fdc086",
+    "LUSC"="#fdc086"
+)
 ```
 
 ```{r}
@@ -72,29 +78,24 @@ tcga = tbl(tcga_db, "expression") %>%
 ```
 
 ```{r}
-gini_sig = read_csv("../../results/downstream_analysis/gini_sig.csv") %>% 
-    filter(cluster != "C3 - ZNF683/chemokine") %>%
-    mutate(cluster = if_else(cluster == "C1 - ZNF683", "C1/C3 - ZNF683", cluster))
+gini_sig = read_csv("../../results/downstream_analysis/gini_sig.csv") 
 clusters = gini_sig %>% pull(cluster) %>% unique()
 signatures = sapply(clusters, function(clus) {
     gini_sig %>% filter(cluster == clus, gene_symbol %in% rownames(tcga)) %>% pull(gene_symbol)
 },simplify=FALSE, USE.NAMES=TRUE)
 
-signatures[["cd8"]] = c("CD8A", "CD8B")
-signatures[["test_exhaustion"]] = c("HAVCR2")
+signatures[["CD8"]] = c("CD8A", "CD8B")
+signatures[["CD4"]] = c("CD4")
+# signatures[["test_exhaustion"]] = c("HAVCR2")
 ```
 
 ```{r}
 annot_df = tbl(tcga_db, "infiltration") %>% 
-    filter(cell_type == "T cell CD8+", method =="epic") %>% 
-    inner_join(tbl(tcga_db, "expression")) %>% 
+    filter(cell_type %in% c("T cell CD8+", "T cell CD4+"), method =="epic") %>% 
     inner_join(tbl(tcga_db, "sample")) %>%
-    filter(gene_symbol %in% c("CD8A", "CD8B")) %>% 
-    select(sample, `CD8+ fraction`=estimate, cohort, log2_tpm) %>% 
+    select(sample, cell_type, estimate, cohort) %>% 
     collect() %>% 
-    group_by(sample, `CD8+ fraction`, cohort) %>%
-    summarise(cd8_score = mean(log2_tpm)) %>%
-    ungroup() %>%
+    spread(cell_type, estimate) %>%  
     as.data.frame() %>% 
     column_to_rownames("sample") 
 
@@ -109,27 +110,62 @@ mcp_score = mcp_score[!apply(is.nan(mcp_score), 1, any),]
 ```
 
 ```{r}
+annot_df2 = annot_df %>% select(cohort)
+annot_df2$`CD8+ score` = mcp_score["CD8", rownames(annot_df)] 
+annot_df2$`CD4+ score` = mcp_score["CD4", rownames(annot_df)]
+```
+
+```{r}
+ann_colors = list(cohort = cohort_colors)
+```
+
+```{r}
 fig_size(8, 3)
-pheatmap(mcp_score, clustering_distance_cols="euclidean",
+pl = pheatmap(mcp_score[!rownames(mcp_score) %in% c("CD4", "CD8"), ], 
+         clustering_distance_cols="euclidean",
          clustering_distance_rows="correlation",
-         clustering_method = "average", annotation_col=annot_df, 
-         show_colnames=FALSE)
+         annotation_col=annot_df2[,c("cohort", "CD8+ score")], 
+         show_colnames=FALSE,
+         annotation_colors = ann_colors
+        )
+
+save_plot("../../results/downstream_analysis/tcga_signatures_heatmap.pdf", pl, base_width=8, base_height = 3)
 ```
 
 ### partial correlation
 
 ```{r}
-pcor_res = pcor(mcp_score %>% t())
-rownames(pcor_res$estimate) = rownames(mcp_score)
-colnames(pcor_res$estimate) = rownames(mcp_score)
+score_mat = mcp_score[!rownames(mcp_score) %in% c("CD4"), ]
 ```
 
 ```{r}
-ggcorrplot(cor(mcp_score %>% t()))
+# pcor_res = pcor(score_mat %>% t())
+# rownames(pcor_res$estimate) = rownames(mcp_score)
+# colnames(pcor_res$estimate) = rownames(mcp_score)
 ```
 
 ```{r}
-ggcorrplot(pcor_res$estimate)
+i = 0
+plotlist = lapply(cohorts, function(cohort) {
+    print(i)
+    tmp_mat = score_mat[, rownames(annot_df)[annot_df$cohort == cohort]]
+    pl = ggcorrplot(cor(tmp_mat %>% t()), type="lower") + ggtitle(cohort)
+    if (i%%2) {
+        pl = pl + theme(axis.text.y=element_blank())
+    }
+    if (i<2) {
+        pl = pl + theme(axis.text.x=element_blank())
+    }
+    i <<- i+1
+    pl
+})
+```
+
+```{r}
+fig_size(8, 7)
+pl = plot_grid(plotlist=plotlist, nrow=2, align = "v", axis="lb")
+pl
+save_plot("../../results/downstream_analysis/tcga_correlation.pdf", pl, base_width=8, base_height=7)
 ```
 
 ## survival
@@ -143,21 +179,23 @@ scores = mcp_score %>%
     as_tibble(rownames="cluster") %>% 
     gather(sample, score, -cluster) %>% 
     inner_join(sample) %>% 
-    inner_join(as_tibble(annot_df, rownames="sample")) %>% 
+    inner_join(as_tibble(annot_df2, rownames="sample")) %>% 
     # should not happen, except there are two samples for the same patient 
     group_by(patient, cluster) %>% 
-    summarise(score = mean(score), cd8_fraction = mean(`CD8+ fraction`), cd8_score = mean(cd8_score))
+    summarise(score = mean(score), 
+              cd4_score = mean(`CD4+ score`),
+              cd8_score = mean(`CD8+ score`))
 ```
 
 ```{r}
 tmp_surv = scores %>% 
     inner_join(tcga_survival, by=c("patient"="bcr_patient_barcode")) %>% 
     filter(type %in% cohorts) %>% 
-    select(patient, cohort=type, gender, ajcc_pathologic_tumor_stage, 
-           birth_days_to, OS, OS.time, cluster, score, cd8_fraction, cd8_score) %>% 
+    select(patient, cohort=type, gender, tumor_stage=ajcc_pathologic_tumor_stage, 
+           birth_days_to, OS, OS.time, cluster, score, cd8_score, cd4_score) %>% 
     spread(cluster, score) %>% 
     ungroup() %>% 
-    mutate(gender=as.factor(gender), tumor_stage=as.factor(ajcc_pathologic_tumor_stage)) 
+    mutate(gender=as.factor(gender), tumor_stage=as.factor(tumor_stage)) 
 
 ```
 
@@ -165,8 +203,8 @@ tmp_surv = scores %>%
 plot_kaplan_meyer = function(cluster, cohorts, adjust_cd8=TRUE, thres = .4) {
     tmp_surv_status = tmp_surv %>% 
         filter(cohort %in% cohorts) %>% 
-        dplyr::mutate(status = if_else(!!sym(col) > quantile(!!sym(col), 1-thres),
-                                "high", if_else(!!sym(col) < quantile(!!sym(col), thres),
+        dplyr::mutate(status = if_else(!!sym(cluster) > quantile(!!sym(cluster), 1-thres),
+                                "high", if_else(!!sym(cluster) < quantile(!!sym(cluster), thres),
                                                 "low", "nd"))) %>% 
         filter(status != "nd") %>% 
         mutate(status = as.factor(status)) %>% 
@@ -176,7 +214,7 @@ plot_kaplan_meyer = function(cluster, cohorts, adjust_cd8=TRUE, thres = .4) {
     fit = surv_fit(Surv(OS.time, OS) ~ status, data=tmp_surv_status)
     
     if (adjust_cd8) {
-        cox_fit = coxph(Surv(OS.time, OS) ~ status + cd8_score + birth_days_to + gender, data=tmp_surv_status)
+        cox_fit = coxph(Surv(OS.time, OS) ~ status + cd8_score + cd4_score + birth_days_to + gender, data=tmp_surv_status)
     } else {
         cox_fit = coxph(Surv(OS.time, OS) ~ status + birth_days_to + gender, data=tmp_surv_status)
     }
@@ -190,17 +228,88 @@ plot_kaplan_meyer = function(cluster, cohorts, adjust_cd8=TRUE, thres = .4) {
    #  print(ggadjustedcurves(cox_fit, data=tmp_surv_status, variable="status") + 
    #     ggtitle(paste0(col, ", p = ", round(p_status, 4))))
     
-    print(ggsurvplot(fit, data=tmp_surv_status, pval = FALSE)  + 
-        ggtitle(paste0(paste(cohorts, collapse=","), ": ", col, ", p = ", round(p_status, 4))))
+   return (ggsurvplot(fit, data=tmp_surv_status, pval = FALSE)  + 
+        ggtitle(paste0(cluster, ", p = ", round(p_status, 4))))
 }
 ```
 
 ```{r}
-for (col in names(signatures)) {
-   plot_kaplan_meyer(col, cohorts="LIHC", adjust_cd8 = TRUE, thres=.33)        
+cohort_list = list(
+    "BRCA"="BRCA",
+    "LIHC"="LIHC",
+    "NSCLC"=c("LUAD", "LUSC")
+)
+plots = sapply(cohort_list, function(cohort) {
+    lapply(names(signatures), function(sig) {
+           plot_kaplan_meyer(sig, cohorts=cohort, adjust_cd8 = TRUE, thres=.33)        
+    })
     
-}
+}, simplify=FALSE, USE.NAMES=TRUE)
+```
 
+```{r}
+fig_size(20, 10 )
+arrange_ggsurvplots(c(plots[["BRCA"]], plots[["LIHC"]], plots[["NSCLC"]]), nrow=3, ncol=9)
+
+```
+
+## try facet
+
+```{r}
+tmp_surv_status = tmp_surv %>% 
+    gather(cluster, score, -patient, -cohort, -gender, -tumor_stage,
+           -birth_days_to, -OS, -OS.time, -cd8_score, -cd4_score) %>% 
+    filter(cluster %in% clusters) %>% 
+    group_by(cluster) %>% 
+    dplyr::mutate(status = if_else(score > quantile(score, 1-thres),
+                            "high", if_else(score < quantile(score, thres),
+                                            "low", "nd"))) %>% 
+    filter(status != "nd") %>% 
+    mutate(status = as.factor(status)) %>% 
+    as.data.frame()
+
+
+fit = surv_fit(Surv(OS.time, OS) ~ status + cohort + cluster, data=tmp_surv_status)
+
+
+#  print(ggadjustedcurves(cox_fit, data=tmp_surv_status, variable="status") + 
+#     ggtitle(paste0(col, ", p = ", round(p_status, 4))))
+
+
+```
+
+### fit coxph for each facet to obtain pvalue
+
+```{r}
+coxph_p = sapply(cohorts, function(coh) {
+    sapply(clusters, function(clus) {
+        tmp_tmp_surv_status = tmp_surv_status %>% 
+            filter(cohort == coh, cluster == clus)
+        cox_fit = coxph(Surv(OS.time, OS) ~ status + cd8_score + birth_days_to + gender, data=tmp_tmp_surv_status)
+        s = summary(cox_fit)
+        s_df = tbl_df(coefficients(s))
+        p_values = s_df$`Pr(>|z|)`
+        p_status = p_values[1]
+        p_status
+    })
+}) %>% as_tibble(rownames="cluster") %>% gather(cohort, p_value, -cluster) %>%
+mutate(p_adj = p.adjust(p_value, method="holm")) %>% 
+mutate(p_adj_text = signif(p_adj, digits=2))
+
+
+
+```
+
+```{r}
+fig_size(11, 6.5)
+pl = ggsurvplot_facet(fit, data=tmp_surv_status, facet.by=c("cohort", "cluster"), 
+                 pval = FALSE, color="status", palette="npg", short.panel.labs=TRUE) +
+    geom_text(aes(x=3000, y=.9, label=paste0("p = ", p_adj_text)), hjust=0, data=coxph_p, size=3.5) + 
+    scale_x_continuous(breaks=c(0, 5000)) + 
+    xlab("OS (days)") + 
+    scale_y_continuous(breaks=c(0, .4, .8))
+
+save_plot("../../results/downstream_analysis/survival.pdf", pl, base_width = 11, base_height=6.5)
 ```
 
 ## ratios of clusters

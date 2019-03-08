@@ -133,7 +133,7 @@ def plot_umap(adata, ax, title="umap", size=0.01, rep="X_umap", color="dataset",
             "the color map contains a color for each distinct value"
         color_vec = np.array([colors[color][x] for x in adata.obs[color].values])
     ax.scatter(adata.obsm[rep][:, 0], adata.obsm[rep][:, 1], s=size,
-            c=color_vec, marker='.', **kwargs)
+            c=color_vec, marker='o', **kwargs)
     ax.set_xlabel("UMAP1")
     ax.set_xticks([])
     ax.set_ylabel("UMAP2")

@@ -199,61 +199,7 @@ tmp_surv = scores %>%
 
 ```
 
-```{r}
-plot_kaplan_meyer = function(cluster, cohorts, adjust_cd8=TRUE, thres = .4) {
-    tmp_surv_status = tmp_surv %>% 
-        filter(cohort %in% cohorts) %>% 
-        dplyr::mutate(status = if_else(!!sym(cluster) > quantile(!!sym(cluster), 1-thres),
-                                "high", if_else(!!sym(cluster) < quantile(!!sym(cluster), thres),
-                                                "low", "nd"))) %>% 
-        filter(status != "nd") %>% 
-        mutate(status = as.factor(status)) %>% 
-        as.data.frame()
-
-    
-    fit = surv_fit(Surv(OS.time, OS) ~ status, data=tmp_surv_status)
-    
-    if (adjust_cd8) {
-        cox_fit = coxph(Surv(OS.time, OS) ~ status + cd8_score + cd4_score + birth_days_to + gender, data=tmp_surv_status)
-    } else {
-        cox_fit = coxph(Surv(OS.time, OS) ~ status + birth_days_to + gender, data=tmp_surv_status)
-    }
-
-    
-    s = summary(cox_fit)
-    s_df = tbl_df(coefficients(s))
-    p_values = s_df$`Pr(>|z|)`
-    p_status = p_values[1]
-    
-   #  print(ggadjustedcurves(cox_fit, data=tmp_surv_status, variable="status") + 
-   #     ggtitle(paste0(col, ", p = ", round(p_status, 4))))
-    
-   return (ggsurvplot(fit, data=tmp_surv_status, pval = FALSE)  + 
-        ggtitle(paste0(cluster, ", p = ", round(p_status, 4))))
-}
-```
-
-```{r}
-cohort_list = list(
-    "BRCA"="BRCA",
-    "LIHC"="LIHC",
-    "NSCLC"=c("LUAD", "LUSC")
-)
-plots = sapply(cohort_list, function(cohort) {
-    lapply(names(signatures), function(sig) {
-           plot_kaplan_meyer(sig, cohorts=cohort, adjust_cd8 = TRUE, thres=.33)        
-    })
-    
-}, simplify=FALSE, USE.NAMES=TRUE)
-```
-
-```{r}
-fig_size(20, 10 )
-arrange_ggsurvplots(c(plots[["BRCA"]], plots[["LIHC"]], plots[["NSCLC"]]), nrow=3, ncol=9)
-
-```
-
-## try facet
+## visualize using facet
 
 ```{r}
 tmp_surv_status = tmp_surv %>% 
@@ -270,12 +216,6 @@ tmp_surv_status = tmp_surv %>%
 
 
 fit = surv_fit(Surv(OS.time, OS) ~ status + cohort + cluster, data=tmp_surv_status)
-
-
-#  print(ggadjustedcurves(cox_fit, data=tmp_surv_status, variable="status") + 
-#     ggtitle(paste0(col, ", p = ", round(p_status, 4))))
-
-
 ```
 
 ### fit coxph for each facet to obtain pvalue

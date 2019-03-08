@@ -90,7 +90,7 @@ sc.pl.umap(adata_all, color="cell_subtype", legend_loc="on data")
 ```
 
 ```{python}
-adata_sub = sc.pp.subsample(adata_all, n_obs=2000, copy=True)
+# adata_sub = sc.pp.subsample(adata_all, n_obs=2000, copy=True)
 ```
 
 ## function definitions
@@ -160,17 +160,43 @@ def normalize_range(a, axis=None):
 target = np.array(adata_all.obs["cell_subtype"].tolist())
 # expr = adata_all.raw.X[:, adata_all.raw.var_names.isin(adata_all.var_names)].T.toarray()
 expr = adata_all.raw.X[:, :].T.toarray()
-expr_sub = adata_sub.raw.X.T.toarray()
-target_sub = np.array(adata_sub.obs["cell_subtype"].tolist())
+# expr_sub = adata_sub.raw.X.T.toarray()
+# target_sub = np.array(adata_sub.obs["cell_subtype"].tolist())
+# assert (adata_sub.raw.var_names == adata_all.raw.var_names).all()
 ```
 
 ```{python}
-assert (adata_sub.raw.var_names == adata_all.raw.var_names).all()
+
 ```
 
 ```{python}
 rosetta = {i : g for i, g in enumerate(adata_all.raw.var_names)}
 rosetta_inv = {g : i for i, g in enumerate(adata_all.raw.var_names)}
+```
+
+### justify cutoff
+
+```{python}
+expr_collapsed = collapse_matrix(expr, target, axis=1, aggregate_fun=robust_mean)
+```
+
+```{python}
+count, cutoffs = np.histogram(expr_collapsed.values, bins=np.hstack((
+    np.arange(0, 1, 0.05), np.arange(1, 2, 0.25), np.arange(2, 5, 0.5)
+)), density=True)
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(4, 2.5))
+ax.plot(cutoffs[1:], count, marker=".")
+ax.axvline(x=.25, color="black")
+ax.set_yscale('log')
+ax.set_ylabel("$\log_{10}$ (density)")
+ax.set_xlabel("aggregated expression")
+ax.set_xlim(0, 4)
+
+fig.tight_layout()
+fig.savefig("results/downstream_analysis/gini_expr_thres.pdf")
 ```
 
 ## standard gini
@@ -220,15 +246,15 @@ for gini in gini_range:
     if not all([len(genes) == 0 for genes in sig_doublegini_ind.values()]):
         # does not only contain empty signatures
         signatures[gini] = sig_doublegini_ind
-    print("#### gini = ", gini)
-    pprint(translate_signatures(sig_doublegini_ind, rosetta))
+    # print("#### gini = ", gini)
+    #pprint(translate_signatures(sig_doublegini_ind, rosetta))
 ```
 
 # signature testing
 
 ```{python}
-mcpt = MCPSignatureTester(expr_sub, target_sub)
-bioqct = BioQCSignatureTester(expr_sub, target_sub)
+mcpt = MCPSignatureTester(expr, target)
+# bioqct = BioQCSignatureTester(expr_sub, target_sub)
 ```
 
 ```{python}
@@ -241,8 +267,8 @@ score_matrices = OrderedDict(
 precision_dict = OrderedDict()
 for gini in signatures.keys():
     score_matrix = score_matrices[gini]
-    sig_labels = bioqct.sort_signatures(signatures[gini])
-    heatmap = aggregate_scores(sig_labels, score_matrix, target_sub)
+    sig_labels = mcpt.sort_signatures(signatures[gini])
+    heatmap = aggregate_scores(sig_labels, score_matrix, target)
     # plot_score_heatmap(heatmap, clip=None)
     
     precision_dict[(gini, "all")] = heatmap_precision(heatmap)
@@ -259,6 +285,18 @@ precision_df.columns = ["gini", "prec_type"] + precision_df.columns.tolist()[2:]
 
 ```{python}
 prec_df_melt = precision_df.melt(id_vars=["gini", "prec_type"], var_name="cluster", value_name="precision")
+```
+
+```{python}
+optimal_thresholds = OrderedDict([
+    ("C1 - ZNF683", 0.5),
+    ("C2 - exhaustion", 0.65),
+    ("C4 - IL7R", 0.4),
+    ("C5 - mitotic", 0.85),
+    ("C6 - heat shock", 0.6),
+    ("C7 - IFIT", 0.8),
+    ("C8 - Immunoglobulin", 0.85)
+])
 ```
 
 ```{python}
@@ -287,6 +325,8 @@ for row in range(2):
                 tmp_ax2.yaxis.set_ticks_position('none')
                 tmp_ax2.yaxis.set_ticks([])
             tmp_ax2.set_ylim(0, 22)
+            if clus in optimal_thresholds:
+                tmp_ax.axvline(x=optimal_thresholds[clus], linestyle="--", color="grey")
             
            
             # plot gini            
@@ -322,15 +362,7 @@ fig.savefig("results/downstream_analysis/gini_thres.pdf")
 ```
 
 ```{python}
-optimal_thresholds = OrderedDict([
-    ("C1 - ZNF683", 0.5),
-    ("C2 - exhaustion", 0.65),
-    ("C4 - IL7R", 0.4),
-    ("C5 - mitotic", 0.85),
-    ("C6 - heat shock", 0.6),
-    ("C7 - IFIT", 0.8),
-    ("C8 - Immunoglobulin", 0.85)
-])
+
 ```
 
 ```{python}
@@ -344,8 +376,8 @@ score_matrix = mcpt.score_signatures(optimal_signatures)
 ```
 
 ```{python}
-sig_labels = bioqct.sort_signatures(optimal_signatures)
-heatmap = aggregate_scores(sig_labels, score_matrix, target_sub)
+sig_labels = mcpt.sort_signatures(optimal_signatures)
+heatmap = aggregate_scores(sig_labels, score_matrix, target)
 within_prec  = heatmap_precision(heatmap, reference="within")
 outside_prec = heatmap_precision(heatmap, reference="outside")
 prec_df = pd.DataFrame().assign(within=within_prec.values(), 

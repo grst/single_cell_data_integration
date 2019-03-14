@@ -133,52 +133,35 @@ tmp_plt
 ```
 
 ```{python}
-sc.pl.draw_graph(adata, color=["IFNG", "TNF", "IL2", "GZMA", "GZMH"])
+sc.pl.draw_graph(adata, color=["IFNG", "TNF", "IL2", "GZMA", "GZMH", "PDCD1"])
 ```
 
 ```{python}
-def plot_umap(adata, ax, title="umap", size=0.01, rep="X_umap", color="dataset", **kwargs):
-    if color in adata.raw.var_names:
-        color_vec = adata.raw.X[:, adata.raw.var_names == color].toarray().flatten()
-        color_vec = (color_vec - np.min(color_vec))/np.ptp(color_vec)
-    else:
-        assert np.all([x in colors[color] for x in np.unique(adata.obs[color].values)]), \
-            "the color map contains a color for each distinct value"
-        color_vec = np.array([colors[color][x] for x in adata.obs[color].values])
-    ax.scatter(adata.obsm[rep][:, 0], adata.obsm[rep][:, 1], s=size,
-            c=color_vec, marker='o', **kwargs)
-    ax.set_xlabel("UMAP1")
-    ax.set_xticks([])
-    ax.set_ylabel("UMAP2")
-    ax.set_yticks([])
-    ax.set_title(title)
-```
-
-```{python}
-genes = iter(["GZMK", "ZNF683", "HAVCR2", "GZMB", "IL7R", 
-         "STMN1", "HSPA6", "IFIT3"])
-fig, axs = plt.subplots(2, 4, figsize=(14, 6))
+genes = ["HAVCR2", "LAG3", "CXCL13", 
+         "LAYN", "PRF1", "GZMB", "GZMK", 
+         "ENTPD1", "ZNF683", "IFNG"]
+gene_it = iter(genes)
+fig, axs = plt.subplots(3, 4, figsize=(12, 9))
 for row in axs:
     for ax in row:
-        gene = next(genes)
-        plot_umap(adata, rep="X_draw_graph_fa", color=gene, ax=ax, title=gene, size=.5)
-        ax.axis("off")
-
-plt.colorbar(axs[0, 0].collections[0], ax=axs[:, 3], use_gridspec=True, fraction=0.05)
-fig.savefig("results/downstream_analysis/gene_expr_fa2.jpg", quality=100, dpi=300)
-```
-
-```{python}
-genes = iter(["HAVCR2", "LAG3", "CXCL13", "LAYN", "GZMB", "PRF1", "GZMK", "ENTPD1"])
-fig, axs = plt.subplots(2, 4, figsize=(14, 6))
-for row in axs:
-    for ax in row:
-        gene = next(genes)
-        plot_umap(adata, rep="X_draw_graph_fa", color=gene, ax=ax, title=gene, size=.5)
+        try:
+            gene = next(gene_it)
+            plot_umap(adata, rep="X_draw_graph_fa", color=gene, ax=ax, title=gene, size=.5)
+        except StopIteration:
+            pass
         ax.axis("off")
 
 plt.colorbar(axs[0, 0].collections[0], ax=axs[:, 3], use_gridspec=True, fraction=0.05)
 fig.savefig("results/downstream_analysis/gene_expr_fa.jpg", quality=100, dpi=300)
+```
+
+```{python}
+sc.pl.dotplot(adata, genes, groupby='clusters', color_map='viridis', figsize=(3, 2.2), show=False)
+plt.savefig("results/downstream_analysis/gene_expr_dotplot.pdf", bbox_inches="tight")
+```
+
+```{python}
+
 ```
 
 ```{python}

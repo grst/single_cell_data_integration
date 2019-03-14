@@ -30,7 +30,7 @@ from bbknn import bbknn
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from multiprocessing import Pool
-from plotting import colors, make_legend_elements, plot_umap
+from plotting import colors, make_legend_elements, plot_umap, names
 ```
 
 ## Load the different datasets
@@ -134,6 +134,12 @@ adata_export.obsm["X_umap"] = adata_export.obsm["X_umap_harmony"]
 ```
 
 ```{python}
+# fix typo
+adata_export.obs["cell_type"] = ["myeloblast-derived" if x == "myeoblast-derived" else x
+                          for x in adata_export.obs["cell_type"].values]
+```
+
+```{python}
 adata_export.write_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
 ```
 
@@ -146,14 +152,23 @@ pass
 ### plots by confounders and cell types
 
 ```{python}
+adata.obs["dataset_names"] = [names["dataset"][x] for x in adata.obs["dataset"]]
+```
+
+```{python}
 fig, axs = plt.subplots(nrows=2, ncols=4, figsize=(14, 7))
 for tool, ax in zip(tools, axs.flatten()):
     plot_umap(adata, ax, title=tool, rep=umap_keys[tool])
 
-fig.legend(**make_legend_elements("dataset"), loc='upper left', bbox_to_anchor=(0.725, 0.45), ncol=1, title="dataset")
+fig.legend(**make_legend_elements("dataset_names"), loc='upper left', bbox_to_anchor=(0.715, 0.45), ncol=1, title="dataset")
 fig.delaxes(axs[1, 3])
 fig.subplots_adjust(hspace=.4)
 fig.savefig("results/data_integrated/compare_tools/umap_dataset.png", quality=100, dpi=300)
+```
+
+```{python}
+adata.obs["cell_type"] = ["myeloblast-derived" if x == "myeoblast-derived" else x
+                          for x in adata.obs["cell_type"].values]
 ```
 
 ```{python}

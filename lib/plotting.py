@@ -98,6 +98,10 @@ names["dataset"] = {
     "zheng_bileas_2017": "G. Zheng et al., 2017"
 }
 
+colors["dataset_names"] = {
+    name: colors["dataset"][key] for key, name in names["dataset"].items()
+}
+
 
 names["cluster"] = {
     "cluster0": "C0 - GZMK",

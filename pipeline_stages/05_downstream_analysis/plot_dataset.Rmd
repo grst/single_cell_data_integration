@@ -53,11 +53,16 @@ adata.obs["cell_type"] = ["myeloblast-derived" if x == "myeoblast-derived" else 
 ### UMAP plot of the main dataset
 
 ```{python}
-fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(14, 9))
+fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(12, 11))
 plot_umap(adata, axs, title="", rep="X_umap", color="cell_type", size=0.1)
+axs.axis("off")
 
 fig.legend(**make_legend_elements("cell_type"), loc='upper left', 
            bbox_to_anchor=(0.75, 0.87), ncol=1, title="cell type")
 fig.savefig("results/data_integrated/batch_effects_removed/harmony/umap_dataset.jpg",
             quality=100, dpi=300)
+```
+
+```{python}
+
 ```

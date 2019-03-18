@@ -1,0 +1,59 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 0.8.6
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+import scanpy.api as sc
+import sys
+sys.path.append("lib")
+from jupytertools import setwd, display
+setwd()
+```
+
+```{python}
+adata_all = sc.read_h5ad("results/downstream_analysis/adata_annotated_integrated.h5ad")
+```
+
+```{python}
+sc.pp.subsample(adata_all, n_obs=20000)
+```
+
+```{python}
+adata_all.write_h5ad("/storage/data/gene_expression/single_cell_datasets/20k.h5ad", compression="lzf")
+```
+
+## CD8 clusters
+
+```{python}
+adata = sc.read_h5ad("results/downstream_analysis/adata_cd8_clusters_annotated.h5ad")
+```
+
+```{python}
+adata.obs["cell_type"]  = adata.obs["clusters"]
+```
+
+```{python}
+adata.obsm["X_umap"] = adata.obsm["X_draw_graph_fa"]
+```
+
+```{python}
+sc.pl.umap(adata, color="cell_type")
+```
+
+```{python}
+adata.write_h5ad("/storage/data/gene_expression/single_cell_datasets/cd8_clusters.h5ad", compression="lzf")
+```
+
+```{python}
+
+```

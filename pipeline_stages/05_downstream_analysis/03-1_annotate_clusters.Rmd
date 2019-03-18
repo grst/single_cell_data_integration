@@ -310,5 +310,9 @@ r_obs_all.to_csv("results/downstream_analysis/edger/r_obs_all.csv")
 ```
 
 ```{python}
+adata.write_h5ad("results/downstream_analysis/adata_cd8_clusters_annotated.h5ad", compression="lzf")
+```
+
+```{python}
 
 ```
